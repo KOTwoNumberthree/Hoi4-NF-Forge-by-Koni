@@ -1,0 +1,2736 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focus Forge — HOI4 National Focus Tree Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#11151b;
+  --bg-alt:#161b22;
+  --panel:#1a212b;
+  --panel-2:#1f2733;
+  --line:#2a3341;
+  --line-soft:#232b37;
+  --ink:#d9dee6;
+  --ink-dim:#8993a3;
+  --ink-faint:#5c6675;
+  --brass:#c9973b;
+  --brass-dim:#8a6a2e;
+  --brass-bright:#e6b95c;
+  --teal:#5f9c85;
+  --red:#c1543f;
+  --red-bright:#e2694f;
+  --blue:#5c86b0;
+  --radius:3px;
+  --font-head:'Oswald',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'IBM Plex Mono',monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eceef1; --bg-alt:#e4e7eb; --panel:#f4f5f7; --panel-2:#eceef1;
+    --line:#c7cdd6; --line-soft:#d7dbe1; --ink:#232a33; --ink-dim:#5b6472; --ink-faint:#8891a0;
+  }
+}
+body{
+  font-family:var(--font-body);
+  background:var(--bg);
+  color:var(--ink);
+  height:100%;
+  overflow:hidden;
+  font-size:13px;
+  -webkit-font-smoothing:antialiased;
+}
+button, input, select, textarea{ font-family:inherit; color:inherit; }
+::selection{ background:var(--brass); color:#1a1408; }
+
+/* ---------- App Shell ---------- */
+#app{
+  display:grid;
+  grid-template-rows:44px 1fr 220px 24px;
+  height:100%;
+  min-height:0;
+}
+#toolbar{
+  grid-row:1;
+  display:flex;
+  align-items:center;
+  gap:2px;
+  padding:0 8px;
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  padding-top:env(safe-area-inset-top,0px);
+  height:calc(44px + env(safe-area-inset-top,0px));
+  overflow-x:auto;
+  overflow-y:hidden;
+  white-space:nowrap;
+}
+#brand{
+  font-family:var(--font-head);
+  font-weight:600;
+  font-size:15px;
+  letter-spacing:.02em;
+  color:var(--brass-bright);
+  padding:0 14px 0 4px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+}
+#brand .sub{ font-family:var(--font-body); font-size:10px; color:var(--ink-faint); font-weight:500; }
+.tb-sep{ width:1px; align-self:stretch; margin:8px 6px; background:var(--line); flex:0 0 auto; }
+.tb-btn{
+  background:transparent; border:1px solid transparent; border-radius:var(--radius);
+  color:var(--ink-dim); padding:6px 9px; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px;
+  flex:0 0 auto;
+}
+.tb-btn:hover{ background:var(--panel-2); color:var(--ink); border-color:var(--line); }
+.tb-btn:active{ transform:translateY(1px); }
+.tb-btn.primary{ color:var(--brass-bright); }
+.tb-btn.primary:hover{ background:rgba(201,151,59,.14); border-color:var(--brass-dim); }
+.tb-btn:disabled{ opacity:.35; cursor:default; }
+.tb-btn:disabled:hover{ background:transparent; border-color:transparent; }
+#zoomreadout{ font-family:var(--font-mono); font-size:11px; color:var(--ink-faint); min-width:42px; text-align:center; }
+.tb-spacer{ flex:1 1 auto; }
+#projname{
+  background:transparent;border:1px solid transparent;color:var(--ink);font-family:var(--font-head);
+  font-size:13px;padding:5px 8px;border-radius:var(--radius);min-width:120px;max-width:260px;
+}
+#projname:hover, #projname:focus{ border-color:var(--line); background:var(--panel-2); outline:none; }
+
+/* ---------- Middle: sidebar / canvas / properties ---------- */
+#mid{ grid-row:2; display:grid; grid-template-columns:250px 1fr 300px; min-height:0; }
+#sidebar, #propspanel{ background:var(--panel); border-right:1px solid var(--line); min-height:0; display:flex; flex-direction:column; }
+#propspanel{ border-right:none; border-left:1px solid var(--line); }
+
+.tabs{ display:flex; border-bottom:1px solid var(--line); flex:0 0 auto; }
+.tab{ flex:1; padding:8px 4px; text-align:center; font-family:var(--font-head); font-size:11px; letter-spacing:.04em;
+  color:var(--ink-faint); cursor:pointer; border-bottom:2px solid transparent; background:var(--bg-alt); }
+.tab.active{ color:var(--brass-bright); border-color:var(--brass); background:var(--panel); }
+.tab:hover:not(.active){ color:var(--ink-dim); }
+.tabpage{ flex:1; min-height:0; overflow-y:auto; display:none; }
+.tabpage.active{ display:flex; flex-direction:column; }
+
+.side-section{ border-bottom:1px solid var(--line-soft); padding:10px; }
+.side-section h4{ margin:0 0 8px; font-family:var(--font-head); font-size:10.5px; letter-spacing:.08em; color:var(--ink-faint); font-weight:500; }
+.branch-row{ display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:var(--radius); cursor:pointer; }
+.branch-row:hover{ background:var(--panel-2); }
+.branch-row.active{ background:var(--panel-2); outline:1px solid var(--line); }
+.branch-swatch{ width:9px; height:9px; border-radius:2px; flex:0 0 auto; }
+.branch-row .bn{ flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.branch-row .cnt{ font-family:var(--font-mono); font-size:10px; color:var(--ink-faint); }
+.branch-row .eye{ opacity:.5; cursor:pointer; font-size:11px; }
+.branch-row .eye:hover{ opacity:1; }
+.mini-btn{ background:var(--panel-2); border:1px solid var(--line); color:var(--ink-dim); border-radius:var(--radius); padding:4px 7px; font-size:11px; cursor:pointer; }
+.mini-btn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+.full-btn{ width:100%; text-align:left; }
+
+#searchbox{ width:100%; background:var(--bg-alt); border:1px solid var(--line); border-radius:var(--radius); padding:7px 8px; color:var(--ink); font-size:12px; }
+#searchbox:focus{ outline:none; border-color:var(--brass-dim); }
+.search-result{ padding:7px 10px; border-bottom:1px solid var(--line-soft); cursor:pointer; }
+.search-result:hover{ background:var(--panel-2); }
+.search-result .sid{ font-family:var(--font-mono); font-size:10.5px; color:var(--brass-bright); }
+.search-result .sname{ font-size:12px; color:var(--ink); margin-top:1px; }
+.search-result .sctx{ font-size:10.5px; color:var(--ink-faint); margin-top:2px; }
+.search-hint{ padding:14px 10px; color:var(--ink-faint); font-size:11.5px; line-height:1.6; }
+
+.asset-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(62px,1fr)); gap:6px; padding:10px; }
+.asset-tile{ border:1px solid var(--line); border-radius:var(--radius); background:var(--bg-alt); cursor:pointer; padding:4px; text-align:center; }
+.asset-tile:hover{ border-color:var(--brass-dim); }
+.asset-tile.sel{ border-color:var(--brass); background:rgba(201,151,59,.1); }
+.asset-tile img{ width:100%; height:32px; object-fit:contain; display:block; margin-bottom:3px; image-rendering:pixelated; }
+.asset-tile .an{ font-size:8.5px; color:var(--ink-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ---------- Canvas ---------- */
+#canvaswrap{ position:relative; overflow:hidden; background:
+   radial-gradient(circle at 1px 1px, var(--line-soft) 1px, transparent 1px) 0 0/26px 26px, var(--bg);
+  cursor:grab; }
+#canvaswrap.panning{ cursor:grabbing; }
+#canvaswrap.connect-mode{ cursor:crosshair; }
+#world{ position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
+#connlayer{ position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
+#nodelayer{ position:absolute; top:0; left:0; }
+
+.fnode{
+  position:absolute; width:128px; min-height:78px;
+  background:linear-gradient(180deg,var(--panel-2),var(--panel));
+  border:1px solid var(--line); border-radius:5px;
+  padding:7px 8px 8px; cursor:grab; user-select:none;
+  box-shadow:0 1px 0 rgba(0,0,0,.3);
+}
+.fnode:hover{ border-color:var(--ink-faint); }
+.fnode.sel{ border-color:var(--brass); box-shadow:0 0 0 2px rgba(201,151,59,.28); }
+.fnode.dragging{ cursor:grabbing; opacity:.88; z-index:50; }
+.fnode.err{ border-color:var(--red); }
+.fnode.warn{ border-left:3px solid var(--brass); }
+.fnode .fn-top{ display:flex; align-items:center; gap:6px; }
+.fnode .fn-icon{ width:26px; height:26px; border-radius:3px; background:var(--bg-alt); border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center; flex:0 0 auto; overflow:hidden; }
+.fnode .fn-icon img{ width:100%; height:100%; object-fit:contain; }
+.fnode .fn-icon .ph{ font-size:11px; color:var(--ink-faint); }
+.fnode .fn-branchdot{ width:6px; height:6px; border-radius:50%; flex:0 0 auto; margin-left:auto; }
+.fnode .fn-title{ font-size:11.5px; font-weight:600; line-height:1.25; margin-top:6px; color:var(--ink);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.fnode .fn-id{ font-family:var(--font-mono); font-size:8.5px; color:var(--ink-faint); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fnode .fn-bottom{ display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+.fnode .fn-cost{ font-family:var(--font-mono); font-size:10px; color:var(--brass-bright); }
+.fnode .fn-badges{ display:flex; gap:3px; }
+.fnode .badge{ width:6px; height:6px; border-radius:50%; }
+.fnode .badge.b-err{ background:var(--red-bright); }
+.fnode .badge.b-warn{ background:var(--brass); }
+.fnode .badge.b-mutex{ background:transparent; border:1px solid var(--red-bright); }
+.fnode .badge.b-code{ background:var(--blue); }
+.fnode .conn-handle{ position:absolute; width:14px; height:14px; border-radius:50%; background:var(--brass); border:2px solid var(--bg);
+  left:50%; transform:translateX(-50%); display:none; cursor:crosshair; }
+.fnode .conn-handle.top{ top:-7px; } .fnode .conn-handle.bottom{ bottom:-7px; }
+.fnode:hover .conn-handle, .fnode.sel .conn-handle{ display:block; }
+
+#canvashud{ position:absolute; left:10px; bottom:10px; display:flex; gap:6px; z-index:5; }
+#canvashud .hud-btn{ width:26px; height:26px; border-radius:var(--radius); background:var(--panel); border:1px solid var(--line);
+  color:var(--ink-dim); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:13px; }
+#canvashud .hud-btn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+#modebar{ position:absolute; top:10px; left:10px; z-index:5; display:flex; gap:6px; align-items:center; }
+.pill{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:5px 11px; font-size:11px; color:var(--ink-dim); display:flex; align-items:center; gap:6px;}
+.pill.on{ border-color:var(--brass-dim); color:var(--brass-bright); background:rgba(201,151,59,.1); }
+#emptyhint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; text-align:center; color:var(--ink-faint); font-size:12.5px; line-height:2; }
+
+/* marquee */
+#marquee{ position:absolute; border:1px solid var(--brass); background:rgba(201,151,59,.12); pointer-events:none; display:none; }
+
+/* ---------- Properties panel ---------- */
+.prop-empty{ padding:30px 16px; text-align:center; color:var(--ink-faint); font-size:12px; line-height:1.9; }
+.prop-scroll{ flex:1; overflow-y:auto; }
+.prop-group{ border-bottom:1px solid var(--line-soft); padding:11px 12px; }
+.prop-group h4{ margin:0 0 9px; font-family:var(--font-head); font-size:10.5px; letter-spacing:.08em; color:var(--ink-faint); font-weight:500; display:flex; align-items:center; justify-content:space-between; }
+.field{ margin-bottom:8px; }
+.field label{ display:block; font-size:10.5px; color:var(--ink-faint); margin-bottom:3px; }
+.field input[type=text], .field input[type=number], .field select, .field textarea{
+  width:100%; background:var(--bg-alt); border:1px solid var(--line); border-radius:var(--radius);
+  padding:6px 7px; color:var(--ink); font-size:12px;
+}
+.field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--brass-dim); }
+.field textarea{ font-family:var(--font-mono); font-size:11px; resize:vertical; min-height:52px; line-height:1.5; }
+.field-row{ display:flex; gap:6px; }
+.field-row .field{ flex:1; }
+.icon-picker-btn{ display:flex; align-items:center; gap:8px; background:var(--bg-alt); border:1px solid var(--line); border-radius:var(--radius); padding:6px 7px; cursor:pointer; }
+.icon-picker-btn:hover{ border-color:var(--brass-dim); }
+.icon-picker-btn .ip-prev{ width:24px; height:24px; background:var(--panel-2); border-radius:2px; display:flex; align-items:center; justify-content:center; overflow:hidden; flex:0 0 auto; }
+.icon-picker-btn .ip-prev img{ width:100%; height:100%; object-fit:contain; }
+.icon-picker-btn .ip-name{ font-family:var(--font-mono); font-size:11px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chip-list{ display:flex; flex-wrap:wrap; gap:5px; }
+.chip{ display:flex; align-items:center; gap:5px; background:var(--bg-alt); border:1px solid var(--line); border-radius:20px; padding:3px 4px 3px 9px; font-size:11px; font-family:var(--font-mono); }
+.chip .x{ cursor:pointer; color:var(--ink-faint); width:14px; height:14px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.chip .x:hover{ background:var(--red); color:#fff; }
+.chip.mx{ border-color:rgba(193,84,63,.5); }
+.prereq-group{ background:var(--bg-alt); border:1px solid var(--line); border-radius:var(--radius); padding:6px; margin-bottom:6px; }
+.prereq-group .pg-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.prereq-group .pg-head span{ font-size:10px; color:var(--ink-faint); }
+.add-row{ display:flex; gap:5px; margin-top:6px; }
+.add-row select{ flex:1; }
+.status-list{ display:flex; flex-direction:column; gap:4px; }
+.status-item{ display:flex; gap:6px; align-items:flex-start; font-size:11px; padding:5px 6px; border-radius:var(--radius); background:var(--bg-alt); }
+.status-item.err{ border-left:2px solid var(--red-bright); }
+.status-item.warn{ border-left:2px solid var(--brass); }
+.status-item.ok{ border-left:2px solid var(--teal); }
+.lang-block{ border:1px solid var(--line); border-radius:var(--radius); padding:8px; margin-bottom:8px; }
+.lang-block .lb-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.lang-block .lb-head b{ font-size:11.5px; color:var(--brass-bright); font-family:var(--font-head); font-weight:500; letter-spacing:.03em; }
+
+/* ---------- Bottom panel ---------- */
+#bottom{ grid-row:3; background:var(--panel); border-top:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+#bottomtabs{ display:flex; align-items:center; border-bottom:1px solid var(--line); flex:0 0 auto; }
+.btab{ padding:7px 14px; font-family:var(--font-head); font-size:11px; letter-spacing:.05em; color:var(--ink-faint); cursor:pointer; border-right:1px solid var(--line-soft); display:flex; align-items:center; gap:6px; }
+.btab.active{ color:var(--brass-bright); background:var(--bg-alt); }
+.btab .cnt{ background:var(--line); color:var(--ink-dim); font-family:var(--font-mono); font-size:9.5px; padding:1px 5px; border-radius:8px; }
+.btab .cnt.err{ background:var(--red); color:#fff; }
+#bottomtools{ margin-left:auto; display:flex; gap:6px; padding-right:8px; }
+#bottompages{ flex:1; min-height:0; }
+.bpage{ height:100%; display:none; }
+.bpage.active{ display:flex; }
+#codeout, #localeout{ flex:1; margin:0; padding:10px 14px; font-family:var(--font-mono); font-size:11.5px; line-height:1.6; color:var(--ink);
+  white-space:pre; overflow:auto; background:var(--bg-alt); border:none; resize:none; width:100%; tab-size:4; }
+#codeout:focus, #localeout:focus{ outline:none; }
+.code-side{ width:190px; border-left:1px solid var(--line); background:var(--panel); padding:10px; overflow-y:auto; flex:0 0 auto; }
+.code-side h5{ margin:0 0 6px; font-size:10px; color:var(--ink-faint); letter-spacing:.06em; font-family:var(--font-head); font-weight:500; }
+.code-side .desc{ font-size:11px; color:var(--ink-faint); line-height:1.6; margin-bottom:10px; }
+.errpage{ flex:1; overflow-y:auto; padding:8px; }
+.err-row{ display:flex; gap:8px; padding:6px 8px; border-bottom:1px solid var(--line-soft); cursor:pointer; align-items:flex-start; }
+.err-row:hover{ background:var(--panel-2); }
+.err-row .sev{ width:7px; height:7px; border-radius:50%; margin-top:4px; flex:0 0 auto; }
+.err-row .sev.error{ background:var(--red-bright); }
+.err-row .sev.warn{ background:var(--brass); }
+.err-row .em{ font-size:12px; }
+.err-row .ef{ font-family:var(--font-mono); font-size:10px; color:var(--ink-faint); margin-top:2px; }
+.err-empty{ padding:24px; text-align:center; color:var(--teal); font-size:12px; }
+
+/* ---------- Status bar ---------- */
+#statusbar{ grid-row:4; display:flex; align-items:center; gap:14px; padding:0 12px; background:var(--bg-alt); border-top:1px solid var(--line);
+  font-size:10.5px; color:var(--ink-faint); padding-bottom:env(safe-area-inset-bottom,0px); }
+#statusbar .stat{ display:flex; align-items:center; gap:5px; }
+#statusmsg{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dot{ width:6px;height:6px;border-radius:50%; }
+
+/* ---------- Modal ---------- */
+#modalbg{ position:fixed; inset:0; background:rgba(8,10,14,.6); display:none; align-items:center; justify-content:center; z-index:100; }
+#modalbg.show{ display:flex; }
+.modal{ background:var(--panel); border:1px solid var(--line); border-radius:6px; width:520px; max-width:92vw; max-height:82vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+.modal .mh{ padding:14px 16px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+.modal .mh h3{ margin:0; font-family:var(--font-head); font-size:14px; font-weight:500; letter-spacing:.02em; }
+.modal .mh .close{ cursor:pointer; color:var(--ink-faint); font-size:16px; }
+.modal .mb{ padding:16px; overflow-y:auto; }
+.modal .mf{ padding:12px 16px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:8px; }
+.btn{ background:var(--panel-2); border:1px solid var(--line); color:var(--ink); border-radius:var(--radius); padding:7px 14px; font-size:12px; cursor:pointer; }
+.btn:hover{ border-color:var(--ink-faint); }
+.btn.primary{ background:var(--brass-dim); border-color:var(--brass-dim); color:#1a1408; font-weight:600; }
+.btn.primary:hover{ background:var(--brass); }
+.btn.danger{ border-color:var(--red); color:var(--red-bright); }
+.btn.danger:hover{ background:rgba(193,84,63,.12); }
+#iconsearch{ width:100%; margin-bottom:10px; }
+.iconmodal-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(70px,1fr)); gap:8px; }
+.context-menu{ position:fixed; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:0 8px 30px rgba(0,0,0,.5); z-index:200; padding:4px; min-width:170px; }
+.cm-item{ padding:7px 10px; font-size:12px; cursor:pointer; border-radius:2px; display:flex; justify-content:space-between; }
+.cm-item:hover{ background:var(--panel-2); }
+.cm-item.danger{ color:var(--red-bright); }
+.cm-sep{ height:1px; background:var(--line); margin:4px 2px; }
+
+::-webkit-scrollbar{ width:9px; height:9px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:var(--line); border-radius:5px; }
+::-webkit-scrollbar-thumb:hover{ background:var(--ink-faint); }
+
+.hidden{ display:none !important; }
+@media (max-width: 900px){
+  #mid{ grid-template-columns:0 1fr 0; }
+  #sidebar, #propspanel{ position:fixed; top:44px; bottom:244px; width:80vw; max-width:300px; z-index:40; transform:translateX(-100%); transition:transform .15s; }
+  #propspanel{ left:auto; right:0; transform:translateX(100%); }
+  #sidebar.open{ transform:translateX(0); }
+  #propspanel.open{ transform:translateX(0); }
+  #bottom{ height:180px; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar"></div>
+  <div id="mid">
+    <div id="sidebar"></div>
+    <div id="canvaswrap">
+      <div id="world">
+        <svg id="connlayer" width="1" height="1"><defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="var(--ink-faint)"></path></marker>
+        </defs></svg>
+        <div id="nodelayer"></div>
+      </div>
+      <div id="marquee"></div>
+      <div id="modebar"></div>
+      <div id="emptyhint"></div>
+      <div id="canvashud"></div>
+    </div>
+    <div id="propspanel"></div>
+  </div>
+  <div id="bottom">
+    <div id="bottomtabs"></div>
+    <div id="bottompages"></div>
+  </div>
+  <div id="statusbar"></div>
+</div>
+<div id="modalbg"><div class="modal" id="modalroot"></div></div>
+
+<script>
+/* =========================================================================
+   Focus Forge — HOI4 National Focus Tree Editor
+   Single-file tool. Internal data model is the single source of truth;
+   HOI4 script + localisation are generated views of that model.
+   ========================================================================= */
+"use strict";
+
+/* =========================================================================
+   0. Small utilities
+   ========================================================================= */
+function el(tag, attrs, children){
+  const e = document.createElement(tag);
+  if(attrs) for(const k in attrs){
+    if(k === "class") e.className = attrs[k];
+    else if(k === "style") e.style.cssText = attrs[k];
+    else if(k.startsWith("on") && typeof attrs[k] === "function") e.addEventListener(k.slice(2), attrs[k]);
+    else if(k === "html") e.innerHTML = attrs[k];
+    else if(attrs[k] === true) e.setAttribute(k, "");
+    else if(attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k]);
+  }
+  if(children) for(const c of [].concat(children)){
+    if(c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+// SVG elements MUST be created in the SVG namespace (createElementNS), not with
+// document.createElement — an <svg><path> built via createElement is just an
+// inert, invisible HTML element once attached to the SVG tree. This is the
+// dedicated constructor for every element that lives inside #connlayer.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, children){
+  const e = document.createElementNS(SVG_NS, tag);
+  if(attrs) for(const k in attrs){
+    if(k === "class") e.setAttribute("class", attrs[k]);
+    else if(k === "style") e.style.cssText = attrs[k];
+    else if(k.startsWith("on") && typeof attrs[k] === "function") e.addEventListener(k.slice(2), attrs[k]);
+    else if(attrs[k] === true) e.setAttribute(k, "");
+    else if(attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k]);
+  }
+  if(children) for(const c of [].concat(children)){
+    if(c == null) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+function uid(prefix){ return (prefix||"id") + "_" + Math.random().toString(36).slice(2,8) + Date.now().toString(36).slice(-4); }
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+function escHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function debounce(fn, ms){ let t; return function(...a){ clearTimeout(t); t = setTimeout(()=>fn.apply(this,a), ms); }; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function toSafeId(s){
+  s = (s||"").toUpperCase().trim().replace(/[^A-Z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  if(!/^[A-Z_]/.test(s)) s = "F_" + s;
+  return s || "FOCUS";
+}
+function nowStamp(){ const d = new Date(); return d.toISOString().replace("T"," ").slice(0,19); }
+
+/* =========================================================================
+   1. Data model — defaults & seed project
+   ========================================================================= */
+const BRANCH_COLORS = ["#c9973b","#5f9c85","#5c86b0","#a36bd6","#c1543f","#6bb0c9","#b0955c","#7f8fa6"];
+
+const BUILTIN_ICONS = [
+  "GFX_goal_generic_political_pressure","GFX_goal_generic_propaganda","GFX_goal_generic_demand_territory",
+  "GFX_goal_generic_industry","GFX_goal_generic_production","GFX_goal_generic_scientist","GFX_goal_generic_research",
+  "GFX_goal_generic_military_industry","GFX_goal_generic_mobilize_army","GFX_goal_generic_more_territorial_claims",
+  "GFX_goal_generic_national_unity","GFX_goal_generic_infantry_manuals","GFX_goal_generic_army_effort",
+  "GFX_goal_generic_navy_effort","GFX_goal_generic_air_effort","GFX_goal_generic_allies_build_infantry",
+  "GFX_goal_generic_construct_infrastructure","GFX_goal_generic_construct_military_factory",
+  "GFX_goal_generic_intelligence_agency","GFX_goal_generic_major_war","GFX_goal_generic_position_army",
+  "GFX_goal_generic_position_navy","GFX_goal_generic_position_air","GFX_goal_generic_anschluss",
+  "GFX_goal_generic_anti_air","GFX_goal_generic_artillery","GFX_goal_generic_tank_manuals",
+  "GFX_goal_generic_flag_purchase","GFX_goal_generic_national_focus","GFX_goal_generic_united_front",
+  "GFX_goal_generic_dam","GFX_goal_generic_missile_defense","GFX_goal_generic_nuclear_power",
+];
+
+function makeEmptyProject(){
+  return {
+    formatVersion: 1,
+    meta: { name: "新しいMOD", author: "", createdAt: Date.now() },
+    focusTree: {
+      id: "my_focus_tree",
+      country: "",
+      default: true,
+      resetOnCivilwar: true,
+      extraCode: "",
+      focuses: [],
+      branches: [],
+      mutexGroups: [],
+    },
+    localisation: {
+      languages: [
+        { code: "japanese", label: "日本語" },
+        { code: "english", label: "English" },
+      ],
+      entries: {},
+    },
+    assets: { icons: [] },
+    settings: { gridX: 90, gridY: 118 },
+  };
+}
+
+function makeFocus(overrides){
+  return Object.assign({
+    id: uid("FOCUS").toUpperCase(),
+    icon: "GFX_goal_generic_national_focus",
+    x: 0, y: 0,
+    cost: 10,
+    relativePositionId: "",
+    branchId: "",
+    prerequisites: [],       // array of arrays (OR of AND) of focus ids
+    mutexIds: [],            // convenience mirror; canonical source is mutexGroups
+    availableCode: "",
+    bypassCode: "",
+    cancelCode: "",
+    completionRewardCode: "",
+    aiWillDoCode: "",
+    willLeadToWarWithCode: "",
+    searchFiltersCode: "",
+    extraFields: [],         // [{key, raw, isBlock}] unknown top-level fields preserved verbatim
+    notes: "",
+  }, overrides || {});
+}
+
+function seedProject(){
+  const p = makeEmptyProject();
+  p.meta.name = "サンプル：再建計画";
+  p.focusTree.id = "sample_focus_tree";
+  const b1 = { id: uid("branch"), name: "政治", color: BRANCH_COLORS[0], collapsed:false, hidden:false, description:"内政・政治改革" };
+  const b2 = { id: uid("branch"), name: "経済", color: BRANCH_COLORS[1], collapsed:false, hidden:false, description:"産業と経済の再建" };
+  p.focusTree.branches.push(b1, b2);
+
+  const f1 = makeFocus({ id:"NF_national_reconstruction", icon:"GFX_goal_generic_national_focus", x:0, y:0, cost:70, branchId:b1.id,
+    completionRewardCode:"add_political_power = 50\nadd_stability = 0.05" });
+  const f2 = makeFocus({ id:"NF_industrial_recovery", icon:"GFX_goal_generic_industry", x:0, y:1, cost:70, branchId:b2.id,
+    prerequisites:[["NF_national_reconstruction"]],
+    completionRewardCode:"add_ideas = infrastructure_boom" });
+  const f3 = makeFocus({ id:"NF_market_reform", icon:"GFX_goal_generic_production", x:-1, y:2, cost:100, branchId:b2.id,
+    prerequisites:[["NF_industrial_recovery"]],
+    completionRewardCode:"add_ideas = market_economy" });
+  const f4 = makeFocus({ id:"NF_state_planning", icon:"GFX_goal_generic_national_unity", x:1, y:2, cost:100, branchId:b2.id,
+    prerequisites:[["NF_industrial_recovery"]],
+    completionRewardCode:"add_ideas = five_year_plan" });
+  p.focusTree.focuses.push(f1, f2, f3, f4);
+  p.focusTree.mutexGroups.push({ id: uid("mutex"), focuses:[f3.id, f4.id] });
+
+  p.localisation.entries[f1.id] = { japanese:{name:"国家再建", desc:"荒廃した国家機構を立て直す。"}, english:{name:"National Reconstruction", desc:"Rebuild the shattered machinery of the state."} };
+  p.localisation.entries[f2.id] = { japanese:{name:"産業復興", desc:"戦火で失われた産業基盤を復旧する。"}, english:{name:"Industrial Recovery", desc:"Restore the industrial base lost to war."} };
+  p.localisation.entries[f3.id] = { japanese:{name:"市場改革", desc:"市場経済への移行を進める。"}, english:{name:"Market Reform", desc:"Push the transition to a market economy."} };
+  p.localisation.entries[f4.id] = { japanese:{name:"国家計画経済", desc:"中央集権的な計画経済を敷く。"}, english:{name:"State Planning", desc:"Institute a centrally planned economy."} };
+  return p;
+}
+
+/* =========================================================================
+   2. Global state
+   ========================================================================= */
+const state = {
+  project: null,
+  selection: new Set(),     // selected focus ids
+  activeFocusId: null,      // focus shown in properties panel (last of selection)
+  camera: { x: 80, y: 40, zoom: 1 },
+  ui: {
+    leftTab: "project",
+    bottomTab: "code",
+    connectMode: false,
+    connectFrom: null,
+    previewMode: false,
+    hiddenBranches: new Set(),
+    activeBranchFilter: null,
+    codeLang: "japanese",
+    dragging: null,          // {ids:[...], startPositions:Map, startMouse:{x,y}}
+    panning: null,
+    marquee: null,
+    codeDirty: false,
+    lastAutoLayoutSig: null,
+  },
+  history: { undo: [], redo: [] },
+  ready: false,
+};
+
+function ft(){ return state.project.focusTree; }
+function loc(){ return state.project.localisation; }
+function focusById(id){ return ft().focuses.find(f => f.id === id); }
+function branchById(id){ return ft().branches.find(b => b.id === id); }
+
+/* -------- History (snapshot based) -------- */
+const HISTORY_LIMIT = 100;
+function snapshot(){ return JSON.stringify(state.project); }
+function pushHistory(){
+  if(!state.project) return;
+  state.history.undo.push(snapshot());
+  if(state.history.undo.length > HISTORY_LIMIT) state.history.undo.shift();
+  state.history.redo.length = 0;
+}
+function commit(label, mutator){
+  pushHistory();
+  mutator();
+  onProjectChanged(label);
+}
+function undo(){
+  if(!state.history.undo.length) return;
+  state.history.redo.push(snapshot());
+  const s = state.history.undo.pop();
+  state.project = JSON.parse(s);
+  sanitizeSelection();
+  onProjectChanged("undo", true);
+}
+function redo(){
+  if(!state.history.redo.length) return;
+  state.history.undo.push(snapshot());
+  const s = state.history.redo.pop();
+  state.project = JSON.parse(s);
+  sanitizeSelection();
+  onProjectChanged("redo", true);
+}
+function sanitizeSelection(){
+  const ids = new Set(ft().focuses.map(f=>f.id));
+  for(const id of Array.from(state.selection)) if(!ids.has(id)) state.selection.delete(id);
+  if(state.activeFocusId && !ids.has(state.activeFocusId)) state.activeFocusId = [...state.selection][0] || null;
+}
+
+/* =========================================================================
+   3. HOI4 code generator
+   ========================================================================= */
+function q(s){ return '"' + String(s==null?"":s).replace(/"/g,'\\"') + '"'; }
+function indentBlock(code, spaces){
+  const pad = " ".repeat(spaces);
+  return String(code||"").split("\n").map(l => l.trim()===""? "" : pad+l).join("\n");
+}
+function mutexPartnersOf(focusId){
+  return mutexPartnersIn(ft(), focusId);
+}
+function mutexPartnersIn(tree, focusId){
+  const set = new Set();
+  for(const g of tree.mutexGroups){
+    if(g.focuses.includes(focusId)) for(const o of g.focuses) if(o!==focusId) set.add(o);
+  }
+  return [...set];
+}
+function generateFocusCode(f, tree){
+  const L = [];
+  L.push("    focus = {");
+  L.push(`        id = ${f.id}`);
+  L.push(`        icon = ${f.icon || "GFX_goal_generic_national_focus"}`);
+  if(f.relativePositionId){
+    L.push(`        x = ${f.x}`);
+    L.push(`        y = ${f.y}`);
+    L.push(`        relative_position_id = ${f.relativePositionId}`);
+  } else {
+    L.push(`        x = ${f.x}`);
+    L.push(`        y = ${f.y}`);
+  }
+  L.push(`        cost = ${f.cost}`);
+  for(const group of f.prerequisites){
+    if(!group.length) continue;
+    L.push("        prerequisite = { " + group.map(id=>`focus = ${id}`).join(" ") + " }");
+  }
+  const partners = mutexPartnersIn(tree, f.id);
+  if(partners.length){
+    L.push("        mutually_exclusive = { " + partners.map(id=>`focus = ${id}`).join(" ") + " }");
+  }
+  if(f.availableCode.trim()){
+    L.push("        available = {");
+    L.push(indentBlock(f.availableCode, 12));
+    L.push("        }");
+  }
+  if(f.bypassCode.trim()){
+    L.push("        bypass = {");
+    L.push(indentBlock(f.bypassCode, 12));
+    L.push("        }");
+  }
+  if(f.cancelCode.trim()){
+    L.push("        cancel = {");
+    L.push(indentBlock(f.cancelCode, 12));
+    L.push("        }");
+  }
+  if(f.searchFiltersCode.trim()){
+    L.push("        search_filters = { " + f.searchFiltersCode.trim() + " }");
+  }
+  L.push("        completion_reward = {");
+  if(f.completionRewardCode.trim()) L.push(indentBlock(f.completionRewardCode, 12));
+  L.push("        }");
+  if(f.aiWillDoCode.trim()){
+    L.push("        ai_will_do = {");
+    L.push(indentBlock(f.aiWillDoCode, 12));
+    L.push("        }");
+  }
+  if(f.willLeadToWarWithCode.trim()){
+    L.push("        will_lead_to_war_with = { " + f.willLeadToWarWithCode.trim() + " }");
+  }
+  for(const ex of (f.extraFields||[])){
+    if(ex.isBlock){
+      L.push(`        ${ex.key} = {`);
+      L.push(indentBlock(ex.raw, 12));
+      L.push("        }");
+    } else {
+      L.push(`        ${ex.key} = ${ex.raw}`);
+    }
+  }
+  L.push("    }");
+  return L.join("\n");
+}
+function generateFocusTreeCode(project){
+  const tree = project.focusTree;
+  const L = [];
+  L.push("focus_tree = {");
+  L.push(`    id = ${tree.id}`);
+  if(tree.country && tree.country.trim()){
+    L.push("    country = {");
+    L.push(`        factor = 1`);
+    L.push("        modifier = {");
+    L.push(`            add = 10`);
+    L.push(`            tag = ${tree.country.trim()}`);
+    L.push("        }");
+    L.push("    }");
+  }
+  if(tree.default) L.push("    default = no");
+  if(tree.resetOnCivilwar === false) L.push("    reset_on_civilwar = no");
+  if(tree.extraCode && tree.extraCode.trim()){
+    L.push(indentBlock(tree.extraCode, 4));
+  }
+  L.push("");
+  for(const f of tree.focuses){
+    L.push(generateFocusCode(f, tree));
+    L.push("");
+  }
+  L.push("}");
+  return L.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+function generateLocalisationCode(project, langCode){
+  const L = [];
+  L.push(`l_${langCode === "english" ? "english" : (project.localisation.languages.find(l=>l.code===langCode)||{}).pdxKey || langCode}:`);
+  L.push(` ${project.focusTree.id}_name:0 ${q(project.meta.name || project.focusTree.id)}`);
+  for(const f of project.focusTree.focuses){
+    const e = (project.localisation.entries[f.id] || {})[langCode] || {};
+    L.push(` ${f.id}:0 ${q(e.name || f.id)}`);
+    L.push(` ${f.id}_desc:0 ${q(e.desc || "")}`);
+  }
+  return L.join("\n");
+}
+function pdxLangKey(code){
+  const known = { japanese:"japanese", english:"english", german:"german", french:"french", spanish:"spanish",
+    russian:"russian", polish:"polish", braz_por:"braz_por", simp_chinese:"simp_chinese" };
+  return known[code] || code;
+}
+function generateLocalisationCodeAll(project){
+  const out = {};
+  for(const lang of project.localisation.languages){
+    const L = [];
+    L.push(`l_${pdxLangKey(lang.code)}:`);
+    for(const f of project.focusTree.focuses){
+      const e = (project.localisation.entries[f.id] || {})[lang.code] || {};
+      L.push(` ${f.id}:0 ${q(e.name || f.id)}`);
+      L.push(` ${f.id}_desc:0 ${q(e.desc || "")}`);
+    }
+    out[lang.code] = L.join("\n");
+  }
+  return out;
+}
+
+/* =========================================================================
+   4. HOI4 script parser (generic brace-matching tokenizer)
+   Preserves unknown fields verbatim so future Effects/Triggers survive.
+   ========================================================================= */
+function splitEntries(text){
+  const entries = [];
+  let i = 0; const n = text.length;
+  function skipWs(){
+    while(i < n){
+      const c = text[i];
+      if(c === "#"){ while(i<n && text[i] !== "\n") i++; continue; }
+      if(/\s/.test(c)){ i++; continue; }
+      break;
+    }
+  }
+  while(i < n){
+    skipWs();
+    if(i >= n) break;
+    const keyStart = i;
+    while(i < n && !/[\s={}]/.test(text[i])) i++;
+    let key = text.slice(keyStart, i);
+    if(!key){ i++; continue; }
+    skipWs();
+    if(text[i] !== "="){
+      // bare token (e.g. inside a plain list) — record as bare value
+      entries.push({ key: null, raw: key, isBlock:false, bare:true });
+      continue;
+    }
+    i++; // consume '='
+    skipWs();
+    if(text[i] === "{"){
+      let depth = 1, j = i+1, start = j, inStr = false;
+      while(j < n && depth > 0){
+        const c = text[j];
+        if(c === '"'){ inStr = !inStr; j++; continue; }
+        if(!inStr){
+          if(c === "#"){ while(j<n && text[j] !== "\n") j++; continue; }
+          if(c === "{"){ depth++; }
+          else if(c === "}"){ depth--; if(depth===0){ break; } }
+        }
+        j++;
+      }
+      const raw = text.slice(start, j);
+      entries.push({ key, raw, isBlock:true });
+      i = j+1;
+    } else if(text[i] === '"'){
+      let j = i+1;
+      while(j<n && text[j] !== '"') j++;
+      entries.push({ key, raw: text.slice(i+1, j), isBlock:false, quoted:true });
+      i = j+1;
+    } else {
+      let start = i;
+      while(i<n && !/[\s{}]/.test(text[i])) i++;
+      entries.push({ key, raw: text.slice(start, i), isBlock:false });
+    }
+  }
+  return entries;
+}
+
+const KNOWN_FOCUS_FREE_FIELDS = {
+  available:"availableCode", bypass:"bypassCode", cancel:"cancelCode",
+  completion_reward:"completionRewardCode", ai_will_do:"aiWillDoCode",
+};
+const KNOWN_FOCUS_STRUCT_FIELDS = new Set([
+  "id","icon","x","y","cost","relative_position_id","prerequisite","mutually_exclusive",
+  "available","bypass","cancel","completion_reward","ai_will_do","will_lead_to_war_with","search_filters",
+]);
+
+function parseFocusEntry(raw, warnings, lineHint){
+  const entries = splitEntries(raw);
+  const f = makeFocus({});
+  f.mutexIdsLocal = []; // temp holder resolved later into mutexGroups
+  for(const e of entries){
+    if(!e.key) continue;
+    switch(e.key){
+      case "id": f.id = e.raw.trim(); break;
+      case "icon": f.icon = e.raw.trim(); break;
+      case "x": f.x = Math.round(parseFloat(e.raw) || 0); break;
+      case "y": f.y = Math.round(parseFloat(e.raw) || 0); break;
+      case "cost": f.cost = parseFloat(e.raw) || 0; break;
+      case "relative_position_id": f.relativePositionId = e.raw.trim(); break;
+      case "prerequisite": {
+        const inner = splitEntries(e.raw);
+        const group = inner.filter(x=>x.key==="focus").map(x=>x.raw.trim());
+        if(group.length) f.prerequisites.push(group);
+        break;
+      }
+      case "mutually_exclusive": {
+        const inner = splitEntries(e.raw);
+        const ids = inner.filter(x=>x.key==="focus").map(x=>x.raw.trim());
+        f.mutexIdsLocal.push(...ids);
+        break;
+      }
+      case "search_filters": f.searchFiltersCode = e.raw.trim(); break;
+      case "will_lead_to_war_with": f.willLeadToWarWithCode = e.raw.trim(); break;
+      case "available": f.availableCode = e.raw.trim(); break;
+      case "bypass": f.bypassCode = e.raw.trim(); break;
+      case "cancel": f.cancelCode = e.raw.trim(); break;
+      case "completion_reward": f.completionRewardCode = e.raw.trim(); break;
+      case "ai_will_do": f.aiWillDoCode = e.raw.trim(); break;
+      default:
+        f.extraFields.push({ key: e.key, raw: e.raw, isBlock: e.isBlock });
+    }
+  }
+  if(!f.id){
+    f.id = uid("IMPORTED").toUpperCase();
+    warnings.push({ line: lineHint||"?", target:"(unnamed focus)", reason:"id フィールドが見つからないため自動生成しました: " + f.id });
+  }
+  return f;
+}
+
+function parseFocusTreeText(text){
+  const warnings = [];
+  const top = splitEntries(text);
+  const treeEntry = top.find(e => e.key === "focus_tree" && e.isBlock);
+  if(!treeEntry){
+    return { ok:false, error: "focus_tree = { ... } ブロックが見つかりませんでした。", warnings };
+  }
+  const body = splitEntries(treeEntry.raw);
+  const tree = { id:"imported_focus_tree", country:"", default:true, resetOnCivilwar:true, extraCode:"", focuses:[], branches:[], mutexGroups:[] };
+  const extraLines = [];
+  const focusEntries = [];
+  for(const e of body){
+    if(!e.key) continue;
+    if(e.key === "id" && !e.isBlock){ tree.id = e.raw.trim(); continue; }
+    if(e.key === "focus" && e.isBlock){ focusEntries.push(e); continue; }
+    if(e.key === "default" && !e.isBlock){ tree.default = e.raw.trim() !== "no"; continue; }
+    if(e.key === "reset_on_civilwar" && !e.isBlock){ tree.resetOnCivilwar = e.raw.trim() !== "no"; continue; }
+    // preserve anything else (country=, continuous_focus_position=, joint_focus=, etc.) as free extra code
+    if(e.isBlock) extraLines.push(`${e.key} = {\n${indentBlock(e.raw,4)}\n}`);
+    else extraLines.push(`${e.key} = ${e.quoted ? q(e.raw) : e.raw}`);
+  }
+  tree.extraCode = extraLines.join("\n");
+
+  const idSeen = new Set();
+  for(const fe of focusEntries){
+    const f = parseFocusEntry(fe.raw, warnings);
+    if(idSeen.has(f.id)){
+      const newId = f.id + "_" + uid("dup").slice(-4);
+      warnings.push({ line:"?", target:f.id, reason:`ID が重複していたため ${newId} に変更しました。` });
+      f.id = newId;
+    }
+    idSeen.add(f.id);
+    tree.focuses.push(f);
+  }
+  // resolve mutual exclusivity into groups (union-find-ish via simple merge)
+  const groups = [];
+  function findGroup(id){ return groups.find(g => g.focuses.includes(id)); }
+  for(const f of tree.focuses){
+    for(const otherId of f.mutexIdsLocal){
+      let g1 = findGroup(f.id), g2 = findGroup(otherId);
+      if(g1 && g2 && g1 !== g2){
+        g1.focuses = [...new Set([...g1.focuses, ...g2.focuses])];
+        groups.splice(groups.indexOf(g2),1);
+      } else if(g1){ if(!g1.focuses.includes(otherId)) g1.focuses.push(otherId); }
+      else if(g2){ if(!g2.focuses.includes(f.id)) g2.focuses.push(f.id); }
+      else groups.push({ id: uid("mutex"), focuses:[f.id, otherId] });
+    }
+    delete f.mutexIdsLocal;
+  }
+  tree.mutexGroups = groups;
+
+  // validate prerequisite / mutex references exist; warn but keep them (don't silently drop)
+  const idSet = new Set(tree.focuses.map(f=>f.id));
+  for(const f of tree.focuses){
+    for(const grp of f.prerequisites) for(const rid of grp){
+      if(!idSet.has(rid)) warnings.push({ line:"?", target:f.id, reason:`前提条件 "${rid}" が存在するNFの中に見つかりません（そのまま保持します）。` });
+    }
+  }
+
+  // auto-assign a single default branch if none exists, and place unresolved x/y
+  if(tree.focuses.length){
+    const branch = { id: uid("branch"), name:"インポート", color: BRANCH_COLORS[0], collapsed:false, hidden:false, description:"" };
+    tree.branches.push(branch);
+    for(const f of tree.focuses) f.branchId = branch.id;
+  }
+  return { ok:true, tree, warnings };
+}
+
+function parseLocalisationText(text, forceLangKey){
+  // Real HOI4 .yml localisation format:
+  //   l_japanese:
+  //    NF_example:0 "国家再建"
+  //    NF_example_desc:0 "国家の再建を開始する。"
+  // A file may (rarely) contain more than one l_<lang>: block; each is parsed
+  // as its own language *unless* forceLangKey is supplied by the user, in
+  // which case every key/value line in the file — regardless of which (or
+  // whether any) l_<lang>: header precedes it — is filed under that single,
+  // user-chosen language. This lets the user's explicit language choice take
+  // priority over whatever the file itself declares (or doesn't declare).
+  const lines = text.split(/\r?\n/);
+  let autoLangKey = null;
+  const result = {};
+  for(const raw of lines){
+    const line = raw.replace(/^\uFEFF/, "");
+    if(/^\s*#/.test(line)) continue;      // comment line
+    if(/^\s*$/.test(line)) continue;      // blank line
+    const m = line.match(/^\s*l_([a-zA-Z_]+)\s*:\s*$/);
+    if(m){ autoLangKey = m[1]; continue; }
+    const langKey = forceLangKey || autoLangKey;
+    if(!langKey) continue; // no language context yet (no header seen, no override given) — skip safely
+    const em = line.match(/^\s*([A-Za-z0-9_.]+)\s*:\s*\d*\s*"((?:[^"\\]|\\.)*)"/);
+    if(em){
+      const key = em[1];
+      const val = em[2].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+      if(!result[langKey]) result[langKey] = {};
+      const bucket = result[langKey];
+      if(key.endsWith("_desc")){
+        const base = key.slice(0, -5);
+        bucket[base] = bucket[base] || {};
+        bucket[base].desc = val;
+      } else {
+        bucket[key] = bucket[key] || {};
+        bucket[key].name = val;
+      }
+    }
+  }
+  return result;
+}
+
+/* -------- language <-> pdx key bookkeeping -------- */
+const LANG_LABELS = {
+  japanese:"日本語", english:"English", german:"Deutsch", french:"Français", spanish:"Español",
+  russian:"Русский", polish:"Polski", braz_por:"Português (Brasil)", simp_chinese:"简体中文",
+  korean:"한국어", italian:"Italiano", turkish:"Türkçe",
+};
+function labelForLangKey(key){ return LANG_LABELS[key] || (key.charAt(0).toUpperCase()+key.slice(1)); }
+function ensureLanguage(langKey){
+  let lang = state.project.localisation.languages.find(l=>l.code===langKey);
+  if(!lang){
+    lang = { code: langKey, label: labelForLangKey(langKey) };
+    state.project.localisation.languages.push(lang);
+  }
+  return lang;
+}
+// merges parsed .yml content (see parseLocalisationText) into the project.
+// Later-loaded files overwrite matching keys — same rule as HOI4 itself uses across loc files.
+function mergeLocalisationImport(parsedByLang){
+  const stats = { languages:{}, unmatchedKeys:0, matchedFocusKeys:0 };
+  const idSet = new Set(ft().focuses.map(f=>f.id));
+  for(const langKey in parsedByLang){
+    ensureLanguage(langKey);
+    const bucket = parsedByLang[langKey];
+    let matched = 0, unmatched = 0;
+    for(const key in bucket){
+      const entry = bucket[key];
+      if(!state.project.localisation.entries[key]) state.project.localisation.entries[key] = {};
+      const existing = state.project.localisation.entries[key][langKey] || {};
+      state.project.localisation.entries[key][langKey] = {
+        name: entry.name != null ? entry.name : existing.name,
+        desc: entry.desc != null ? entry.desc : existing.desc,
+      };
+      if(idSet.has(key)) matched++; else unmatched++;
+    }
+    stats.languages[langKey] = { keys: Object.keys(bucket).length, matched, unmatched };
+    stats.matchedFocusKeys += matched;
+    stats.unmatchedKeys += unmatched;
+  }
+  return stats;
+}
+// Coverage summary for a given language: how many NFs currently have a
+// non-empty display name (and separately, description) for that language,
+// out of the total NF count. Used by the "Localization対応: X / Y NF" readout.
+function locCoverage(langCode){
+  const focuses = ft().focuses;
+  let named = 0, desced = 0;
+  for(const f of focuses){
+    const e = (state.project.localisation.entries[f.id] || {})[langCode];
+    if(e && e.name && e.name.trim()) named++;
+    if(e && e.desc && e.desc.trim()) desced++;
+  }
+  return { total: focuses.length, named, desced };
+}
+
+/* =========================================================================
+   5. Validator
+   ========================================================================= */
+function validateProject(project){
+  const issues = []; // {severity:'error'|'warn', focusId, message}
+  const tree = project.focusTree;
+  const idCount = {};
+  for(const f of tree.focuses) idCount[f.id] = (idCount[f.id]||0)+1;
+  const idSet = new Set(tree.focuses.map(f=>f.id));
+
+  if(!tree.id || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tree.id)){
+    issues.push({ severity:"error", focusId:null, message:`focus_tree の id "${tree.id}" が不正です（英数字とアンダースコアのみ使用可能）。` });
+  }
+  if(!tree.focuses.length){
+    issues.push({ severity:"warn", focusId:null, message:"NFが1つも作成されていません。" });
+  }
+
+  for(const f of tree.focuses){
+    if(!f.id || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(f.id)){
+      issues.push({ severity:"error", focusId:f.id, message:`NF ID "${f.id}" が不正です（英数字とアンダースコアのみ）。` });
+    }
+    if(idCount[f.id] > 1){
+      issues.push({ severity:"error", focusId:f.id, message:`NF ID "${f.id}" が重複しています。` });
+    }
+    if(!f.icon || !f.icon.trim()){
+      issues.push({ severity:"warn", focusId:f.id, message:"アイコンが未設定です。" });
+    }
+    if(f.cost == null || isNaN(f.cost) || f.cost < 0){
+      issues.push({ severity:"error", focusId:f.id, message:`Cost の値が不正です: ${f.cost}` });
+    }
+    if(!Number.isFinite(f.x) || !Number.isFinite(f.y)){
+      issues.push({ severity:"error", focusId:f.id, message:"座標(x, y) が数値ではありません。" });
+    }
+    for(const grp of f.prerequisites) for(const rid of grp){
+      if(!idSet.has(rid)) issues.push({ severity:"error", focusId:f.id, message:`前提条件の参照先 "${rid}" が存在しません。` });
+    }
+    if(f.relativePositionId && !idSet.has(f.relativePositionId)){
+      issues.push({ severity:"error", focusId:f.id, message:`relative_position_id の参照先 "${f.relativePositionId}" が存在しません。` });
+    }
+    const partners = mutexPartnersInProject(project, f.id);
+    for(const pid of partners){
+      if(!idSet.has(pid)) issues.push({ severity:"error", focusId:f.id, message:`相互排他の参照先 "${pid}" が存在しません。` });
+    }
+    const hasLoc = project.localisation.entries[f.id];
+    const primary = project.localisation.languages[0] && hasLoc && hasLoc[project.localisation.languages[0].code];
+    if(!primary || !primary.name || !primary.name.trim()){
+      issues.push({ severity:"warn", focusId:f.id, message:"表示名（Localisation）が未設定です。" });
+    }
+    if(!f.completionRewardCode.trim()){
+      issues.push({ severity:"warn", focusId:f.id, message:"completion_reward が空です（HOI4的には有効ですが、報酬なしのNFになります）。" });
+    }
+  }
+  // detect prerequisite cycles
+  const cyc = detectCycles(tree.focuses);
+  for(const id of cyc) issues.push({ severity:"error", focusId:id, message:"前提条件の循環参照が検出されました。" });
+  return issues;
+}
+function mutexPartnersInProject(project, focusId){
+  const set = new Set();
+  for(const g of project.focusTree.mutexGroups) if(g.focuses.includes(focusId)) for(const o of g.focuses) if(o!==focusId) set.add(o);
+  return [...set];
+}
+function detectCycles(focuses){
+  const graph = {}; for(const f of focuses) graph[f.id] = f.prerequisites.flat();
+  const bad = new Set();
+  const WHITE=0, GRAY=1, BLACK=2; const color = {}; for(const id in graph) color[id]=WHITE;
+  function dfs(id, stack){
+    color[id]=GRAY; stack.push(id);
+    for(const dep of (graph[id]||[])){
+      if(!(dep in color)) continue;
+      if(color[dep]===GRAY){ for(const s of stack) bad.add(s); bad.add(dep); }
+      else if(color[dep]===WHITE) dfs(dep, stack);
+    }
+    stack.pop(); color[id]=BLACK;
+  }
+  for(const id in graph) if(color[id]===WHITE) dfs(id, []);
+  return [...bad];
+}
+function focusIssues(issuesList, focusId){ return issuesList.filter(i=>i.focusId===focusId); }
+
+/* =========================================================================
+   6. Layout: absolute position resolution (handles relative_position_id) +
+      auto-layout (layered, based on prerequisite depth)
+   ========================================================================= */
+function resolveAbsolutePositions(tree){
+  const pos = {}; // id -> {x,y} in grid units
+  const visiting = new Set();
+  function resolve(f){
+    if(pos[f.id]) return pos[f.id];
+    if(visiting.has(f.id)){ pos[f.id] = { x:f.x, y:f.y }; return pos[f.id]; }
+    visiting.add(f.id);
+    let base = { x:0, y:0 };
+    if(f.relativePositionId){
+      const rf = focusByIdIn(tree, f.relativePositionId);
+      if(rf && rf !== f) base = resolve(rf);
+    }
+    const p = { x: base.x + f.x, y: base.y + f.y };
+    pos[f.id] = p;
+    visiting.delete(f.id);
+    return p;
+  }
+  for(const f of tree.focuses) resolve(f);
+  return pos;
+}
+function focusByIdIn(tree, id){ return tree.focuses.find(f=>f.id===id); }
+
+function autoLayout(){
+  const tree = ft();
+  if(!tree.focuses.length) return;
+  resolvedXCache = {};
+  const byId = {}; tree.focuses.forEach(f=>byId[f.id]=f);
+  const depth = {};
+  const preds = {}; tree.focuses.forEach(f=> preds[f.id] = f.prerequisites.flat().filter(id=>byId[id]));
+  function getDepth(id, seen){
+    if(depth[id] != null) return depth[id];
+    if(seen.has(id)) return 0;
+    seen.add(id);
+    const ps = preds[id];
+    const d = ps.length ? 1 + Math.max(...ps.map(p=>getDepth(p, seen))) : 0;
+    depth[id] = d;
+    return d;
+  }
+  tree.focuses.forEach(f => getDepth(f.id, new Set()));
+
+  // group by branch, then within branch lay out by depth (y) and assign x via sibling ordering
+  const byBranch = {};
+  for(const f of tree.focuses){ (byBranch[f.branchId||""] = byBranch[f.branchId||""] || []).push(f); }
+  let branchOriginX = 0;
+  const order = tree.branches.map(b=>b.id).concat([""]);
+  for(const bid of order){
+    const list = byBranch[bid]; if(!list || !list.length) continue;
+    const rows = {};
+    for(const f of list){ (rows[depth[f.id]] = rows[depth[f.id]] || []).push(f); }
+    let maxWidth = 0;
+    const depths = Object.keys(rows).map(Number).sort((a,b)=>a-b);
+    for(const d of depths){
+      const row = rows[d];
+      row.sort((a,b)=> (preds[a.id][0]&&byId[preds[a.id][0]] ? (resolvedXCache[preds[a.id][0]]||0) : 0) - (preds[b.id][0]&&byId[preds[b.id][0]] ? (resolvedXCache[preds[b.id][0]]||0) : 0));
+      row.forEach((f,i)=>{
+        f.x = Math.round(branchOriginX + i - (row.length-1)/2);
+        f.y = d;
+        f.relativePositionId = "";
+        resolvedXCache[f.id] = f.x;
+      });
+      maxWidth = Math.max(maxWidth, row.length);
+    }
+    branchOriginX += Math.max(maxWidth, 2) + 1;
+  }
+}
+let resolvedXCache = {};
+
+/* =========================================================================
+   7. ID / reference integrity helpers
+   ========================================================================= */
+function renameFocusId(oldId, newId){
+  newId = toSafeId(newId);
+  if(newId === oldId) return newId;
+  if(focusById(newId)){ return null; } // collision — caller should warn
+  const tree = ft();
+  const f = focusById(oldId); if(!f) return null;
+  f.id = newId;
+  for(const other of tree.focuses){
+    other.prerequisites = other.prerequisites.map(grp => grp.map(id => id===oldId? newId : id));
+    if(other.relativePositionId === oldId) other.relativePositionId = newId;
+  }
+  for(const g of tree.mutexGroups) g.focuses = g.focuses.map(id => id===oldId? newId : id);
+  if(state.project.localisation.entries[oldId]){
+    state.project.localisation.entries[newId] = state.project.localisation.entries[oldId];
+    delete state.project.localisation.entries[oldId];
+  }
+  if(state.activeFocusId === oldId) state.activeFocusId = newId;
+  if(state.selection.has(oldId)){ state.selection.delete(oldId); state.selection.add(newId); }
+  return newId;
+}
+function removeFocus(id){
+  const tree = ft();
+  tree.focuses = tree.focuses.filter(f=>f.id!==id);
+  for(const f of tree.focuses) f.prerequisites = f.prerequisites.map(g=>g.filter(x=>x!==id)).filter(g=>g.length);
+  for(const g of tree.mutexGroups) g.focuses = g.focuses.filter(x=>x!==id);
+  tree.mutexGroups = tree.mutexGroups.filter(g=>g.focuses.length>1);
+  for(const f of tree.focuses) if(f.relativePositionId===id) f.relativePositionId = "";
+  delete state.project.localisation.entries[id];
+  state.selection.delete(id);
+  if(state.activeFocusId===id) state.activeFocusId = null;
+}
+function uniqueFocusId(base){
+  base = toSafeId(base || "NEW_FOCUS");
+  let id = base, n = 1;
+  while(focusById(id)) id = base + "_" + (++n);
+  return id;
+}
+// HOI4 focus x/y are grid slots and must be whole numbers. Any legacy/imported
+// fractional coordinates are rounded (round-half-up) so the *stored* data — not
+// just the on-screen position — is always an integer.
+function sanitizeCoordinates(tree){
+  for(const f of tree.focuses){
+    f.x = Math.round(Number(f.x) || 0);
+    f.y = Math.round(Number(f.y) || 0);
+  }
+}
+// HOI4 treats `cost` as an abstract point value; the actual number of days to
+// complete a focus is cost × 7 (i.e. one "cost point" per game week).
+function costToDays(cost){ return Math.round((Number(cost)||0) * 7); }
+
+/* =========================================================================
+   8. Rendering — Toolbar
+   ========================================================================= */
+function renderToolbar(){
+  const bar = document.getElementById("toolbar");
+  clear(bar);
+  const canUndo = state.history.undo.length>0, canRedo = state.history.redo.length>0;
+  bar.appendChild(el("div", {id:"brand"}, [ "⚒ FOCUS FORGE", el("span",{class:"sub"},"HOI4 NF ツリーエディタ") ]));
+  bar.appendChild(el("input", {id:"projname", value: state.project.meta.name, title:"プロジェクト名",
+    onchange:(e)=>{ commit("rename project", ()=>{ state.project.meta.name = e.target.value; }); } }));
+  bar.appendChild(el("div",{class:"tb-sep"}));
+  bar.appendChild(tbBtn("＋ NF追加", ()=>addFocusAtCenter(), true));
+  bar.appendChild(tbBtn("⧉ 複製", ()=>duplicateSelection(), false, state.selection.size===0));
+  bar.appendChild(tbBtn("✕ 削除", ()=>deleteSelection(), false, state.selection.size===0));
+  bar.appendChild(el("div",{class:"tb-sep"}));
+  bar.appendChild(tbBtn("↺ 元に戻す", undoAndRender, false, !canUndo));
+  bar.appendChild(tbBtn("↻ やり直す", redoAndRender, false, !canRedo));
+  bar.appendChild(el("div",{class:"tb-sep"}));
+  bar.appendChild(tbBtn("▦ 自動整列", ()=>{ if(confirm("現在の配置を自動整列で上書きします。よろしいですか？")) commit("auto layout", autoLayout); }));
+  bar.appendChild(tbBtn("⤢ 全体表示", fitToScreen));
+  bar.appendChild(el("div",{class:"tb-sep"}));
+  bar.appendChild(tbBtn(state.ui.previewMode ? "✎ 編集に戻る" : "▶ プレビュー", ()=>{ state.ui.previewMode = !state.ui.previewMode; renderAll(); }, state.ui.previewMode));
+  bar.appendChild(el("div",{class:"tb-spacer"}));
+  bar.appendChild(tbBtn("📥 コードを読込", ()=>openImportModal()));
+  bar.appendChild(tbBtn("🌐 Localisation", ()=>openLanguageManagerModal()));
+  bar.appendChild(tbBtn("📂 プロジェクトを開く", ()=>openProjectFileModal()));
+  bar.appendChild(tbBtn("💾 保存", ()=>saveProjectFile()));
+  bar.appendChild(tbBtn("⇩ 書き出し", ()=>openExportModal(), true));
+  bar.appendChild(el("div",{class:"tb-sep"}));
+  bar.appendChild(el("span",{id:"zoomreadout"}, Math.round(state.camera.zoom*100)+"%"));
+}
+function tbBtn(label, fn, primary, disabled){
+  return el("button", { class:"tb-btn"+(primary?" primary":""), disabled: !!disabled, onclick: fn }, label);
+}
+function undoAndRender(){ undo(); }
+function redoAndRender(){ redo(); }
+
+/* ---- toolbar actions ---- */
+function addFocusAtCenter(){
+  const tree = ft();
+  const wrap = document.getElementById("canvaswrap");
+  const cx = wrap.clientWidth/2, cy = wrap.clientHeight/2;
+  const world = screenToWorld(cx, cy);
+  const gx = Math.round(world.x / state.project.settings.gridX);
+  const gy = Math.round(world.y / state.project.settings.gridY);
+  commit("add focus", ()=>{
+    const branchId = state.ui.activeBranchFilter || (tree.branches[0] && tree.branches[0].id) || ensureDefaultBranch();
+    const f = makeFocus({ id: uniqueFocusId("NEW_FOCUS"), x:gx, y:gy, branchId });
+    tree.focuses.push(f);
+    state.selection = new Set([f.id]);
+    state.activeFocusId = f.id;
+  });
+}
+function ensureDefaultBranch(){
+  const tree = ft();
+  if(tree.branches.length) return tree.branches[0].id;
+  const b = { id: uid("branch"), name:"未分類", color: BRANCH_COLORS[0], collapsed:false, hidden:false, description:"" };
+  tree.branches.push(b);
+  return b.id;
+}
+function duplicateSelection(){
+  if(!state.selection.size) return;
+  commit("duplicate", ()=>{
+    const ids = [...state.selection];
+    const idMap = {};
+    const tree = ft();
+    const clones = [];
+    for(const id of ids){
+      const src = focusById(id); if(!src) continue;
+      const clone = deepClone(src);
+      clone.id = uniqueFocusId(src.id + "_COPY");
+      clone.x = src.x; clone.y = src.y + 0; // placed then offset below
+      idMap[id] = clone.id;
+      clones.push(clone);
+    }
+    for(const c of clones){
+      c.x += 1; c.y += 1;
+      c.prerequisites = c.prerequisites.map(g => g.map(pid => idMap[pid] || pid));
+      if(c.relativePositionId && idMap[c.relativePositionId]) c.relativePositionId = idMap[c.relativePositionId];
+      tree.focuses.push(c);
+      const srcLoc = state.project.localisation.entries[ids[clones.indexOf(c)]];
+      if(srcLoc) state.project.localisation.entries[c.id] = deepClone(srcLoc);
+    }
+    // duplicate mutex relationships among the selected set only
+    for(const g of tree.mutexGroups.slice()){
+      const relevant = g.focuses.filter(id => idMap[id]);
+      if(relevant.length > 1){
+        tree.mutexGroups.push({ id: uid("mutex"), focuses: relevant.map(id=>idMap[id]) });
+      }
+    }
+    state.selection = new Set(clones.map(c=>c.id));
+    state.activeFocusId = clones[0] && clones[0].id;
+  });
+}
+function deleteSelection(){
+  if(!state.selection.size) return;
+  const ids = [...state.selection];
+  commit("delete", ()=>{ for(const id of ids) removeFocus(id); });
+}
+function fitToScreen(){
+  const tree = ft();
+  if(!tree.focuses.length){ state.camera = {x:80,y:40,zoom:1}; renderCanvasTransform(); return; }
+  const pos = resolveAbsolutePositions(tree);
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const f of tree.focuses){
+    const p = pos[f.id];
+    minX = Math.min(minX, p.x*gx); maxX = Math.max(maxX, p.x*gx+128);
+    minY = Math.min(minY, p.y*gy); maxY = Math.max(maxY, p.y*gy+90);
+  }
+  const wrap = document.getElementById("canvaswrap");
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const zoom = clamp(Math.min(w/(maxX-minX+160), h/(maxY-minY+160), 1.4), 0.15, 1.4);
+  state.camera.zoom = zoom;
+  state.camera.x = w/2 - ((minX+maxX)/2)*zoom;
+  state.camera.y = h/2 - ((minY+maxY)/2)*zoom;
+  renderCanvasTransform();
+}
+
+/* =========================================================================
+   9. Rendering — Sidebar (Project / Assets / Search)
+   ========================================================================= */
+function renderSidebar(){
+  const root = document.getElementById("sidebar");
+  clear(root);
+  root.appendChild(el("div", {class:"tabs"}, [
+    el("div",{class:"tab"+(state.ui.leftTab==="project"?" active":""), onclick:()=>{state.ui.leftTab="project"; renderSidebar();}}, "ツリー"),
+    el("div",{class:"tab"+(state.ui.leftTab==="assets"?" active":""), onclick:()=>{state.ui.leftTab="assets"; renderSidebar();}}, "アセット"),
+    el("div",{class:"tab"+(state.ui.leftTab==="search"?" active":""), onclick:()=>{state.ui.leftTab="search"; renderSidebar();}}, "検索"),
+  ]));
+  const page = el("div", {class:"tabpage active"});
+  if(state.ui.leftTab === "project") page.appendChild(renderBranchesSection());
+  if(state.ui.leftTab === "project") page.appendChild(renderMutexSection());
+  if(state.ui.leftTab === "assets") page.appendChild(renderAssetsSection());
+  if(state.ui.leftTab === "search") page.appendChild(renderSearchSection());
+  root.appendChild(page);
+}
+
+function renderBranchesSection(){
+  const tree = ft();
+  const wrap = el("div", {class:"side-section"});
+  wrap.appendChild(el("h4", null, "ブランチ"));
+  const list = el("div");
+  const allRow = el("div", {class:"branch-row"+(state.ui.activeBranchFilter===null?" active":""),
+    onclick:()=>{ state.ui.activeBranchFilter=null; renderAll(); } }, [
+      el("span",{class:"branch-swatch", style:"background:var(--ink-faint)"}),
+      el("span",{class:"bn"}, "すべて表示"),
+      el("span",{class:"cnt"}, String(tree.focuses.length)),
+  ]);
+  list.appendChild(allRow);
+  for(const b of tree.branches){
+    const count = tree.focuses.filter(f=>f.branchId===b.id).length;
+    const hidden = state.ui.hiddenBranches.has(b.id);
+    const row = el("div", {class:"branch-row"+(state.ui.activeBranchFilter===b.id?" active":""),
+      onclick:(ev)=>{ if(ev.target.classList.contains("eye")) return; state.ui.activeBranchFilter = state.ui.activeBranchFilter===b.id? null : b.id; renderAll(); } }, [
+      el("span",{class:"branch-swatch", style:`background:${b.color}`}),
+      el("span",{class:"bn", title:b.name}, b.name),
+      el("span",{class:"cnt"}, String(count)),
+      el("span",{class:"eye", title: hidden? "表示する":"非表示にする", onclick:()=>{
+        if(hidden) state.ui.hiddenBranches.delete(b.id); else state.ui.hiddenBranches.add(b.id);
+        renderAll();
+      }}, hidden ? "🚫" : "👁"),
+    ]);
+    row.oncontextmenu = (ev)=>{ ev.preventDefault(); openBranchContextMenu(ev, b); };
+    row.ondblclick = ()=> editBranch(b);
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  wrap.appendChild(el("button", {class:"mini-btn full-btn", style:"margin-top:8px;", onclick:()=>{
+    commit("add branch", ()=>{
+      const color = BRANCH_COLORS[tree.branches.length % BRANCH_COLORS.length];
+      tree.branches.push({ id: uid("branch"), name:"新しいブランチ", color, collapsed:false, hidden:false, description:"" });
+    });
+  }}, "＋ ブランチを追加"));
+  return wrap;
+}
+function editBranch(b){
+  openModal("ブランチを編集", (body, close)=>{
+    const nameInput = el("input",{type:"text", value:b.name});
+    const descInput = el("textarea", {}, b.description||"");
+    const colorInput = el("input",{type:"text", value:b.color});
+    body.appendChild(fieldWrap("名前", nameInput));
+    body.appendChild(fieldWrap("説明", descInput));
+    body.appendChild(fieldWrap("色（HEX）", colorInput));
+    const swatches = el("div",{style:"display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"});
+    BRANCH_COLORS.forEach(c=> swatches.appendChild(el("div",{style:`width:20px;height:20px;border-radius:4px;background:${c};cursor:pointer;border:2px solid ${c===b.color?'#fff':'transparent'}`, onclick:()=>{ colorInput.value=c; }})));
+    body.appendChild(swatches);
+    return {
+      onSave: ()=>{
+        commit("edit branch", ()=>{ b.name=nameInput.value.trim()||b.name; b.description=descInput.value; b.color=colorInput.value.trim()||b.color; });
+        close();
+      },
+      onDelete: ft().branches.length>0 ? ()=>{
+        if(!confirm(`ブランチ「${b.name}」を削除します。所属するNFは「未分類」になります。よろしいですか？`)) return;
+        commit("delete branch", ()=>{
+          const tree = ft();
+          tree.branches = tree.branches.filter(x=>x.id!==b.id);
+          for(const f of tree.focuses) if(f.branchId===b.id) f.branchId = "";
+        });
+        close();
+      } : null,
+    };
+  });
+}
+function openBranchContextMenu(ev, b){
+  showContextMenu(ev.clientX, ev.clientY, [
+    { label:"編集", action:()=>editBranch(b) },
+    { label:"このブランチのNFのみ表示", action:()=>{ state.ui.activeBranchFilter=b.id; renderAll(); } },
+  ]);
+}
+
+function renderMutexSection(){
+  const tree = ft();
+  const wrap = el("div", {class:"side-section"});
+  wrap.appendChild(el("h4", null, "相互排他グループ ("+tree.mutexGroups.length+")"));
+  if(!tree.mutexGroups.length){
+    wrap.appendChild(el("div", {style:"color:var(--ink-faint);font-size:11px;line-height:1.6;"}, "NFを2つ以上選択し、右パネルの「相互排他に追加」から作成できます。"));
+  }
+  for(const g of tree.mutexGroups){
+    const row = el("div", {class:"chip-list", style:"margin-bottom:8px;"});
+    for(const fid of g.focuses){
+      const f = focusById(fid);
+      row.appendChild(el("span",{class:"chip mx", onclick:()=>focusOnNode(fid)}, [ f? (f.id) : fid,
+        el("span",{class:"x", onclick:(ev)=>{ ev.stopPropagation(); commit("remove from mutex", ()=>{ g.focuses = g.focuses.filter(x=>x!==fid); if(g.focuses.length<2) tree.mutexGroups = tree.mutexGroups.filter(x=>x!==g); }); }}, "×") ]));
+    }
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+function renderAssetsSection(){
+  const wrap = el("div", {class:"side-section", style:"border-bottom:none; flex:1;"});
+  wrap.appendChild(el("h4", null, "ビルトインGFXアイコン"));
+  const grid1 = el("div", {class:"asset-grid"});
+  for(const gfx of BUILTIN_ICONS){
+    grid1.appendChild(iconTile(gfx, null, ()=>applyIconToSelection(gfx)));
+  }
+  wrap.appendChild(grid1);
+  wrap.appendChild(el("h4", {style:"margin-top:14px;"}, "カスタムアイコン"));
+  const grid2 = el("div", {class:"asset-grid"});
+  for(const asset of state.project.assets.icons){
+    grid2.appendChild(iconTile(asset.gfxName, asset.dataUrl, ()=>applyIconToSelection(asset.gfxName), ()=>editAsset(asset)));
+  }
+  wrap.appendChild(grid2);
+  const uploadBtn = el("button", {class:"mini-btn full-btn", style:"margin-top:10px;"}, "＋ 画像をアップロード");
+  const fileInput = el("input", {type:"file", accept:"image/*", style:"display:none", multiple:true, onchange:(e)=> handleAssetUpload(e.target.files) });
+  uploadBtn.onclick = ()=> fileInput.click();
+  wrap.appendChild(uploadBtn);
+  wrap.appendChild(fileInput);
+  return wrap;
+}
+function iconTile(gfxName, dataUrl, onClick, onEdit){
+  const t = el("div", {class:"asset-tile", title:gfxName, onclick:onClick});
+  if(dataUrl) t.appendChild(el("img", {src:dataUrl}));
+  else t.appendChild(el("div", {style:"height:32px;display:flex;align-items:center;justify-content:center;"}, el("span",{class:"ph"},"GFX")));
+  t.appendChild(el("div", {class:"an"}, gfxName.replace(/^GFX_/,"")));
+  if(onEdit) t.ondblclick = onEdit;
+  return t;
+}
+function applyIconToSelection(gfx){
+  if(!state.activeFocusId){ return; }
+  const f = focusById(state.activeFocusId);
+  if(!f) return;
+  commit("set icon", ()=>{ f.icon = gfx; });
+}
+function handleAssetUpload(files){
+  const list = [...files];
+  let pending = list.length;
+  const newAssets = [];
+  list.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      newAssets.push({ id: uid("asset"), name:file.name.replace(/\.[^.]+$/,""), gfxName:"GFX_"+file.name.replace(/\.[^.]+$/,"").toLowerCase().replace(/[^a-z0-9]+/g,"_"), dataUrl: reader.result });
+      pending--;
+      if(pending===0){ commit("upload assets", ()=>{ state.project.assets.icons.push(...newAssets); }); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function editAsset(asset){
+  openModal("アイコンアセットを編集", (body, close)=>{
+    const nameInput = el("input",{type:"text", value:asset.name});
+    const gfxInput = el("input",{type:"text", value:asset.gfxName});
+    body.appendChild(el("img",{src:asset.dataUrl, style:"width:64px;height:64px;object-fit:contain;background:var(--bg-alt);border-radius:4px;margin-bottom:10px;"}));
+    body.appendChild(fieldWrap("名前", nameInput));
+    body.appendChild(fieldWrap("GFX名", gfxInput));
+    return {
+      onSave: ()=>{ commit("edit asset", ()=>{ asset.name=nameInput.value.trim()||asset.name; asset.gfxName=gfxInput.value.trim()||asset.gfxName; }); close(); },
+      onDelete: ()=>{ if(confirm("このアセットを削除しますか？")){ commit("delete asset", ()=>{ state.project.assets.icons = state.project.assets.icons.filter(a=>a.id!==asset.id); }); close(); } },
+    };
+  });
+}
+
+function renderSearchSection(){
+  const wrap = el("div", {style:"display:flex;flex-direction:column;height:100%;"});
+  const inputWrap = el("div", {style:"padding:10px;"});
+  const input = el("input", {id:"searchbox", type:"text", placeholder:"ID・名称・説明・コードなどを検索…", value: state.ui.searchQuery||""});
+  inputWrap.appendChild(input);
+  wrap.appendChild(inputWrap);
+  const results = el("div", {style:"flex:1;overflow-y:auto;"});
+  wrap.appendChild(results);
+  function runSearch(){
+    const qv = input.value.trim().toLowerCase();
+    state.ui.searchQuery = input.value;
+    clear(results);
+    if(!qv){ results.appendChild(el("div",{class:"search-hint"}, "NF ID、表示名、説明、ブランチ名、アイコン名、Effect/Triggerコードを横断検索します。")); return; }
+    const tree = ft();
+    const hits = [];
+    for(const f of tree.focuses){
+      const locEntry = state.project.localisation.entries[f.id] || {};
+      const names = Object.values(locEntry).map(l=>(l.name||"")+" "+(l.desc||"")).join(" ");
+      const branch = branchById(f.branchId);
+      const haystack = [f.id, f.icon, names, branch?branch.name:"", f.availableCode, f.bypassCode, f.cancelCode,
+        f.completionRewardCode, f.aiWillDoCode, f.willLeadToWarWithCode].join(" \n ").toLowerCase();
+      if(haystack.includes(qv)) hits.push({f, branch, names});
+    }
+    if(!hits.length){ results.appendChild(el("div",{class:"search-hint"}, "一致するNFが見つかりません。")); return; }
+    for(const h of hits){
+      const r = el("div", {class:"search-result", onclick:()=>{ focusOnNode(h.f.id); } }, [
+        el("div", {class:"sid"}, h.f.id),
+        el("div", {class:"sname"}, (Object.values(state.project.localisation.entries[h.f.id]||{})[0]||{}).name || "(名称未設定)"),
+        el("div", {class:"sctx"}, (h.branch?h.branch.name+" · ":"") + `cost ${h.f.cost}（${costToDays(h.f.cost)}日）`),
+      ]);
+      results.appendChild(r);
+    }
+  }
+  input.addEventListener("input", runSearch);
+  setTimeout(runSearch, 0);
+  setTimeout(()=>input.focus(), 10);
+  return wrap;
+}
+function focusOnNode(id){
+  state.selection = new Set([id]);
+  state.activeFocusId = id;
+  const tree = ft();
+  const f = focusById(id);
+  if(f){
+    const b = branchById(f.branchId);
+    if(b && state.ui.hiddenBranches.has(b.id)) state.ui.hiddenBranches.delete(b.id);
+    const pos = resolveAbsolutePositions(tree)[id];
+    const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+    const wrap = document.getElementById("canvaswrap");
+    state.camera.zoom = Math.max(state.camera.zoom, 0.8);
+    state.camera.x = wrap.clientWidth/2 - (pos.x*gx+64)*state.camera.zoom;
+    state.camera.y = wrap.clientHeight/2 - (pos.y*gy+40)*state.camera.zoom;
+  }
+  renderAll();
+}
+
+/* =========================================================================
+   10. Rendering — Canvas (nodes + connections)
+   ========================================================================= */
+function screenToWorld(sx, sy){
+  return { x: (sx - state.camera.x) / state.camera.zoom, y: (sy - state.camera.y) / state.camera.zoom };
+}
+function renderCanvasTransform(){
+  const world = document.getElementById("world");
+  world.style.transform = `translate(${state.camera.x}px, ${state.camera.y}px) scale(${state.camera.zoom})`;
+  const z = document.getElementById("zoomreadout");
+  if(z) z.textContent = Math.round(state.camera.zoom*100)+"%";
+}
+
+let currentIssues = [];
+function renderCanvas(){
+  currentIssues = validateProject(state.project);
+  const tree = ft();
+  const pos = resolveAbsolutePositions(tree);
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  const nodelayer = document.getElementById("nodelayer");
+  const wrap = document.getElementById("canvaswrap");
+  wrap.classList.toggle("connect-mode", state.ui.connectMode);
+  clear(nodelayer);
+  const empty = document.getElementById("emptyhint");
+  empty.style.display = tree.focuses.length ? "none" : "flex";
+  if(!tree.focuses.length) empty.innerHTML = "NFがまだありません。<br>左上の「＋ NF追加」またはダブルクリックで作成してください。";
+
+  const visible = tree.focuses.filter(f => {
+    if(state.ui.activeBranchFilter && f.branchId !== state.ui.activeBranchFilter) return false;
+    if(state.ui.hiddenBranches.has(f.branchId)) return false;
+    return true;
+  });
+
+  for(const f of visible){
+    const p = pos[f.id];
+    const px = p.x * gx, py = p.y * gy;
+    const issues = focusIssues(currentIssues, f.id);
+    const hasErr = issues.some(i=>i.severity==="error");
+    const hasWarn = issues.some(i=>i.severity==="warn");
+    const branch = branchById(f.branchId);
+    const asset = state.project.assets.icons.find(a=>a.gfxName===f.icon);
+    const isSel = state.selection.has(f.id);
+    const locEntry = (state.project.localisation.entries[f.id]||{})[state.ui.codeLang] || (Object.values(state.project.localisation.entries[f.id]||{})[0]) || {};
+
+    const node = el("div", {
+      class: "fnode" + (isSel?" sel":"") + (hasErr?" err":"") + (hasWarn?" warn":""),
+      style: `left:${px}px; top:${py}px;`,
+      "data-id": f.id,
+    });
+    const top = el("div", {class:"fn-top"});
+    const iconBox = el("div", {class:"fn-icon"});
+    if(asset) iconBox.appendChild(el("img",{src:asset.dataUrl}));
+    else iconBox.appendChild(el("span",{class:"ph"}, "GFX"));
+    top.appendChild(iconBox);
+    if(branch) top.appendChild(el("span",{class:"fn-branchdot", style:`background:${branch.color}`, title:branch.name}));
+    node.appendChild(top);
+    node.appendChild(el("div", {class:"fn-title"}, locEntry.name || f.id));
+    node.appendChild(el("div", {class:"fn-id"}, f.id));
+    const bottom = el("div", {class:"fn-bottom"});
+    bottom.appendChild(el("span",{class:"fn-cost", title:`cost ${f.cost} × 7`}, "⏱ "+costToDays(f.cost)+"日"));
+    const badges = el("div",{class:"fn-badges"});
+    if(hasErr) badges.appendChild(el("span",{class:"badge b-err", title:"エラーあり"}));
+    else if(hasWarn) badges.appendChild(el("span",{class:"badge b-warn", title:"警告あり"}));
+    if(mutexPartnersOf(f.id).length) badges.appendChild(el("span",{class:"badge b-mutex", title:"相互排他あり"}));
+    if(f.completionRewardCode.trim() || f.availableCode.trim() || f.bypassCode.trim()) badges.appendChild(el("span",{class:"badge b-code", title:"手動コードあり"}));
+    bottom.appendChild(badges);
+    node.appendChild(bottom);
+
+    if(!state.ui.previewMode){
+      node.appendChild(el("div",{class:"conn-handle top", title:"ドラッグして前提条件として接続",
+        onmousedown:(ev)=>{ ev.stopPropagation(); startConnectDrag(f.id, "in", ev); }}));
+      node.appendChild(el("div",{class:"conn-handle bottom", title:"ドラッグして後続NFへ接続",
+        onmousedown:(ev)=>{ ev.stopPropagation(); startConnectDrag(f.id, "out", ev); }}));
+    }
+
+    node.addEventListener("mousedown", (ev)=> onNodeMouseDown(ev, f.id));
+    node.addEventListener("contextmenu", (ev)=>{ ev.preventDefault(); if(!state.selection.has(f.id)){ state.selection=new Set([f.id]); state.activeFocusId=f.id; renderAll(); } openNodeContextMenu(ev, f.id); });
+    node.addEventListener("dblclick", (ev)=>{ ev.stopPropagation(); state.selection = new Set([f.id]); state.activeFocusId = f.id; renderAll(); });
+    nodelayer.appendChild(node);
+  }
+  renderConnections(visible, pos, gx, gy);
+}
+
+/* -------- orthogonal (H/V-only) connector routing -------- */
+const NODE_HALF_W = 64, NODE_TOP_Y = 0, NODE_BOTTOM_Y = 79;
+// Anchors always run from the node that sits higher on screen (smaller grid Y)
+// to the one that sits lower, exiting the upper node's bottom edge and
+// entering the lower node's top edge. If the "from" focus happens to be
+// below its "to" focus (unusual, but must not crash), the anchor sides are
+// swapped so the line still reads sensibly instead of running backwards.
+function orthogonalAnchors(fromPos, toPos, gx, gy){
+  const fx = fromPos.x*gx + NODE_HALF_W, tx = toPos.x*gx + NODE_HALF_W;
+  if(fromPos.y <= toPos.y){
+    return { ax: fx, ay: fromPos.y*gy + NODE_BOTTOM_Y, bx: tx, by: toPos.y*gy + NODE_TOP_Y };
+  }
+  return { ax: fx, ay: fromPos.y*gy + NODE_TOP_Y, bx: tx, by: toPos.y*gy + NODE_BOTTOM_Y };
+}
+// Builds a horizontal/vertical-only path: down from A to the vertical
+// midpoint, across to B's column, then down into B. Falls back to a single
+// straight segment when A and B already share a column or a row, so no
+// pointless jog is drawn. Never produces a diagonal segment.
+function orthogonalPath(ax, ay, bx, by){
+  if(Math.abs(ax-bx) < 0.5 || Math.abs(ay-by) < 0.5) return `M ${ax} ${ay} L ${bx} ${by}`;
+  const midY = (ay+by)/2;
+  return `M ${ax} ${ay} L ${ax} ${midY} L ${bx} ${midY} L ${bx} ${by}`;
+}
+function renderConnections(visible, pos, gx, gy){
+  const svg = document.getElementById("connlayer");
+  clear(svg);
+  const defs = svgEl("defs");
+  const marker = svgEl("marker", { id:"arrow", markerWidth:"9", markerHeight:"9", refX:"7", refY:"3.5", orient:"auto" },
+    [ svgEl("path", { d:"M0,0 L7,3.5 L0,7 Z", fill:"#eef1f5" }) ]);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  const visibleIds = new Set(visible.map(f=>f.id));
+  let maxX=0, maxY=0;
+  // prerequisite connections — white line, H/V-only, A(prereq) above -> B(this focus) below
+  for(const f of visible){
+    const p = pos[f.id]; maxX = Math.max(maxX, p.x*gx+300); maxY = Math.max(maxY, p.y*gy+300);
+    if(!f.prerequisites.length) continue;
+    f.prerequisites.forEach((group)=>{
+      group.forEach(fromId=>{
+        if(!visibleIds.has(fromId)) return;
+        const fp = pos[fromId]; if(!fp) return;
+        const { ax, ay, bx, by } = orthogonalAnchors(fp, p, gx, gy);
+        const strokeDash = group.length>1 ? "5,3" : "none"; // dashed = one of several OR-alternative prerequisites
+        svg.appendChild(svgEl("path", { d: orthogonalPath(ax,ay,bx,by), stroke:"#eef1f5", "stroke-width":"1.6", fill:"none",
+          "stroke-dasharray": strokeDash, "marker-end":"url(#arrow)", opacity:"0.85" }));
+      });
+    });
+  }
+  // mutually-exclusive connections — red line, same H/V-only routing, no arrowhead (relation is symmetric)
+  const drawnPairs = new Set();
+  for(const g of ft().mutexGroups){
+    for(let i=0;i<g.focuses.length;i++) for(let j=i+1;j<g.focuses.length;j++){
+      const a = g.focuses[i], b = g.focuses[j];
+      if(!visibleIds.has(a) || !visibleIds.has(b)) continue;
+      const key = [a,b].sort().join("|"); if(drawnPairs.has(key)) continue; drawnPairs.add(key);
+      const pa = pos[a], pb = pos[b];
+      const { ax, ay, bx, by } = orthogonalAnchors(pa, pb, gx, gy);
+      svg.appendChild(svgEl("path", { d: orthogonalPath(ax,ay,bx,by), stroke:"#e2694f", "stroke-width":"1.6",
+        "stroke-dasharray":"4,3", fill:"none", opacity:"0.8" }));
+    }
+  }
+  svg.setAttribute("width", Math.max(maxX,1));
+  svg.setAttribute("height", Math.max(maxY,1));
+}
+
+/* -------- connect-drag (create prerequisite by dragging from a handle) -------- */
+function startConnectDrag(focusId, dir, ev){
+  state.ui.connectMode = true;
+  state.ui.connectFrom = { focusId, dir };
+  const wrap = document.getElementById("canvaswrap");
+  wrap.classList.add("connect-mode");
+  function move(e){ renderGhostLine(focusId, dir, e); }
+  function up(e){
+    wrap.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    const target = document.elementFromPoint(e.clientX, e.clientY);
+    const targetNode = target && target.closest(".fnode");
+    removeGhostLine();
+    state.ui.connectMode = false; wrap.classList.remove("connect-mode");
+    if(targetNode){
+      const targetId = targetNode.getAttribute("data-id");
+      if(targetId && targetId !== focusId){
+        const fromId = dir === "out" ? focusId : targetId;
+        const toId = dir === "out" ? targetId : focusId;
+        commit("connect focus", ()=>{
+          const toF = focusById(toId);
+          if(toF && !toF.prerequisites.some(g=>g.includes(fromId))) toF.prerequisites.push([fromId]);
+        });
+        return;
+      }
+    }
+    renderAll();
+  }
+  wrap.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+function renderGhostLine(focusId, dir, e){
+  let ghost = document.getElementById("ghostline");
+  const svg = document.getElementById("connlayer");
+  if(!ghost){ ghost = svgEl("path", {id:"ghostline", stroke:"#e6b95c", "stroke-width":"1.8", fill:"none", "stroke-dasharray":"4,3"}); svg.appendChild(ghost); }
+  const tree = ft(); const pos = resolveAbsolutePositions(tree);
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  const f = focusById(focusId); const p = pos[focusId];
+  const fromX = p.x*gx+64, fromY = dir==="out" ? p.y*gy+79 : p.y*gy;
+  const wrap = document.getElementById("canvaswrap");
+  const rect = wrap.getBoundingClientRect();
+  const w = screenToWorld(e.clientX-rect.left, e.clientY-rect.top);
+  ghost.setAttribute("d", `M ${fromX} ${fromY} L ${w.x} ${w.y}`);
+}
+function removeGhostLine(){ const g = document.getElementById("ghostline"); if(g) g.remove(); }
+
+/* =========================================================================
+   11. Canvas interaction — select / drag / pan / zoom / marquee
+   ========================================================================= */
+function onNodeMouseDown(ev, id){
+  if(ev.button !== 0) return;
+  ev.stopPropagation();
+  const additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+  if(additive){
+    if(state.selection.has(id)) state.selection.delete(id); else state.selection.add(id);
+  } else if(!state.selection.has(id)){
+    state.selection = new Set([id]);
+  }
+  state.activeFocusId = id;
+  renderNodesSelectionOnly();
+  renderProperties();
+
+  const tree = ft();
+  const startMouse = { x: ev.clientX, y: ev.clientY };
+  const startPositions = new Map();
+  for(const sid of state.selection){ const f = focusById(sid); if(f) startPositions.set(sid, {x:f.x, y:f.y}); }
+  let moved = false;
+  let historySaved = false;
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  function move(e){
+    const dx = (e.clientX - startMouse.x) / state.camera.zoom;
+    const dy = (e.clientY - startMouse.y) / state.camera.zoom;
+    if(!moved && (Math.abs(dx)>2 || Math.abs(dy)>2)){
+      moved = true;
+      if(!historySaved){ pushHistory(); historySaved = true; } // snapshot BEFORE the coordinates change
+    }
+    if(!moved) return;
+    for(const [sid, start] of startPositions){
+      const f = focusById(sid); if(!f) continue;
+      // Snap to whole grid slots on every frame, not just on release — HOI4
+      // focus coordinates are always integers, and the stored value (not
+      // just the rendered position) must reflect that at all times.
+      f.x = Math.round(start.x + dx/gx);
+      f.y = Math.round(start.y + dy/gy);
+      const node = document.querySelector(`.fnode[data-id="${cssEscape(sid)}"]`);
+      if(node){ node.style.left = (resolveAbsolutePositions(tree)[sid].x*gx)+"px"; node.style.top = (resolveAbsolutePositions(tree)[sid].y*gy)+"px"; node.classList.add("dragging"); }
+    }
+    renderConnectionsQuick();
+  }
+  function up(){
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    if(moved){
+      for(const sid of startPositions.keys()){ const f = focusById(sid); if(f){ f.x = Math.round(f.x); f.y = Math.round(f.y); } }
+      onProjectChanged("move focus", true);
+    }
+  }
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+function renderConnectionsQuick(){
+  const tree = ft(); const pos = resolveAbsolutePositions(tree);
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  const visible = tree.focuses.filter(f => (!state.ui.activeBranchFilter || f.branchId===state.ui.activeBranchFilter) && !state.ui.hiddenBranches.has(f.branchId));
+  renderConnections(visible, pos, gx, gy);
+}
+function renderNodesSelectionOnly(){
+  document.querySelectorAll(".fnode").forEach(n=>{
+    n.classList.toggle("sel", state.selection.has(n.getAttribute("data-id")));
+  });
+}
+function cssEscape(s){ return (window.CSS && CSS.escape) ? CSS.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g,"\\$&"); }
+
+function setupCanvasPanZoom(){
+  const wrap = document.getElementById("canvaswrap");
+  wrap.addEventListener("mousedown", (ev)=>{
+    if(ev.button === 1 || (ev.button===0 && ev.spaceHeld) || ev.button===0 && spaceDown){
+      startPan(ev); return;
+    }
+    if(ev.button === 0){
+      const rect = wrap.getBoundingClientRect();
+      startMarquee(ev.clientX-rect.left, ev.clientY-rect.top, !ev.shiftKey);
+    } else if(ev.button===1){ startPan(ev); }
+  });
+  wrap.addEventListener("dblclick",(ev)=>{
+    if(ev.target !== wrap && ev.target.id !== "world" && ev.target.id !== "nodelayer") return;
+    const rect = wrap.getBoundingClientRect();
+    const world = screenToWorld(ev.clientX-rect.left, ev.clientY-rect.top);
+    const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+    commit("add focus", ()=>{
+      const branchId = state.ui.activeBranchFilter || ensureDefaultBranch();
+      const f = makeFocus({ id: uniqueFocusId("NEW_FOCUS"), x: Math.round(world.x/gx), y: Math.round(world.y/gy), branchId });
+      ft().focuses.push(f);
+      state.selection = new Set([f.id]); state.activeFocusId = f.id;
+    });
+  });
+  wrap.addEventListener("wheel", (ev)=>{
+    ev.preventDefault();
+    const rect = wrap.getBoundingClientRect();
+    const mx = ev.clientX-rect.left, my = ev.clientY-rect.top;
+    const before = screenToWorld(mx,my);
+    const factor = ev.deltaY < 0 ? 1.1 : 0.9;
+    state.camera.zoom = clamp(state.camera.zoom*factor, 0.12, 2.5);
+    const after = screenToWorld(mx,my);
+    state.camera.x += (after.x-before.x)*state.camera.zoom;
+    state.camera.y += (after.y-before.y)*state.camera.zoom;
+    renderCanvasTransform();
+  }, {passive:false});
+  wrap.addEventListener("contextmenu",(ev)=>{ if(ev.target===wrap || ev.target.id==="world"||ev.target.id==="nodelayer"){ ev.preventDefault(); openCanvasContextMenu(ev); } });
+}
+let spaceDown = false;
+function startPan(ev){
+  ev.preventDefault();
+  const wrap = document.getElementById("canvaswrap");
+  wrap.classList.add("panning");
+  const start = { x: ev.clientX, y: ev.clientY, camX: state.camera.x, camY: state.camera.y };
+  function move(e){
+    state.camera.x = start.camX + (e.clientX-start.x);
+    state.camera.y = start.camY + (e.clientY-start.y);
+    renderCanvasTransform();
+  }
+  function up(){ wrap.classList.remove("panning"); window.removeEventListener("mousemove",move); window.removeEventListener("mouseup",up); }
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+function startMarquee(sx, sy, clearFirst){
+  const box = document.getElementById("marquee");
+  const wrap = document.getElementById("canvaswrap");
+  const rect = wrap.getBoundingClientRect();
+  box.style.display = "block";
+  box.style.left=sx+"px"; box.style.top=sy+"px"; box.style.width="0px"; box.style.height="0px";
+  let moved = false;
+  function move(e){
+    moved = true;
+    const cx = e.clientX-rect.left, cy = e.clientY-rect.top;
+    const x = Math.min(sx,cx), y = Math.min(sy,cy), w = Math.abs(cx-sx), h = Math.abs(cy-sy);
+    box.style.left=x+"px"; box.style.top=y+"px"; box.style.width=w+"px"; box.style.height=h+"px";
+  }
+  function up(e){
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    box.style.display="none";
+    if(!moved){ if(clearFirst){ state.selection=new Set(); state.activeFocusId=null; renderAll(); } return; }
+    const cx = e.clientX-rect.left, cy = e.clientY-rect.top;
+    const bx1=Math.min(sx,cx), bx2=Math.max(sx,cx), by1=Math.min(sy,cy), by2=Math.max(sy,cy);
+    const w1 = screenToWorld(bx1,by1), w2 = screenToWorld(bx2,by2);
+    const tree = ft(); const pos = resolveAbsolutePositions(tree);
+    const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+    if(clearFirst) state.selection = new Set();
+    for(const f of tree.focuses){
+      const p = pos[f.id]; const px=p.x*gx, py=p.y*gy;
+      if(px+128>=w1.x && px<=w2.x && py+90>=w1.y && py<=w2.y) state.selection.add(f.id);
+    }
+    state.activeFocusId = [...state.selection][0] || null;
+    renderAll();
+  }
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+}
+
+function setupKeyboardShortcuts(){
+  window.addEventListener("keydown",(ev)=>{
+    const tag = (ev.target.tagName||"").toLowerCase();
+    const typing = tag==="input"||tag==="textarea"||ev.target.isContentEditable;
+    if(ev.code === "Space" && !typing){ spaceDown = true; document.getElementById("canvaswrap").style.cursor="grab"; }
+    if(typing) return;
+    const mod = ev.ctrlKey || ev.metaKey;
+    if(mod && ev.key.toLowerCase()==="z" && !ev.shiftKey){ ev.preventDefault(); undo(); }
+    else if(mod && (ev.key.toLowerCase()==="y" || (ev.key.toLowerCase()==="z" && ev.shiftKey))){ ev.preventDefault(); redo(); }
+    else if(mod && ev.key.toLowerCase()==="c"){ ev.preventDefault(); clipboard = [...state.selection].map(id=>deepClone(focusById(id))).filter(Boolean); }
+    else if(mod && ev.key.toLowerCase()==="v"){ ev.preventDefault(); pasteClipboard(); }
+    else if(mod && ev.key.toLowerCase()==="d"){ ev.preventDefault(); duplicateSelection(); }
+    else if(mod && ev.key.toLowerCase()==="a"){ ev.preventDefault(); state.selection = new Set(ft().focuses.map(f=>f.id)); renderAll(); }
+    else if(ev.key === "Delete" || ev.key === "Backspace"){ if(state.selection.size){ ev.preventDefault(); deleteSelection(); } }
+    else if(ev.key === "Escape"){ state.selection = new Set(); state.activeFocusId=null; renderAll(); }
+  });
+  window.addEventListener("keyup",(ev)=>{ if(ev.code==="Space"){ spaceDown=false; document.getElementById("canvaswrap").style.cursor=""; } });
+}
+let clipboard = [];
+function pasteClipboard(){
+  if(!clipboard.length) return;
+  commit("paste", ()=>{
+    const idMap = {}; const tree = ft(); const clones = [];
+    for(const src of clipboard){
+      const clone = deepClone(src);
+      clone.id = uniqueFocusId(src.id + "_PASTE");
+      idMap[src.id] = clone.id;
+      clones.push(clone);
+    }
+    for(const c of clones){
+      c.x += 1; c.y += 1;
+      c.prerequisites = c.prerequisites.map(g=>g.map(pid=>idMap[pid]||pid).filter(pid=>focusById(pid)||idMap[pid]));
+      tree.focuses.push(c);
+    }
+    state.selection = new Set(clones.map(c=>c.id));
+    state.activeFocusId = clones[0] && clones[0].id;
+  });
+}
+
+/* -------- context menus -------- */
+function showContextMenu(x, y, items){
+  closeContextMenu();
+  const menu = el("div", {class:"context-menu", style:`left:${x}px; top:${y}px;`});
+  for(const it of items){
+    if(it.sep){ menu.appendChild(el("div",{class:"cm-sep"})); continue; }
+    menu.appendChild(el("div", {class:"cm-item"+(it.danger?" danger":""), onclick:()=>{ closeContextMenu(); it.action(); }}, it.label));
+  }
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  if(rect.right > window.innerWidth) menu.style.left = (x-rect.width)+"px";
+  if(rect.bottom > window.innerHeight) menu.style.top = (y-rect.height)+"px";
+  setTimeout(()=> window.addEventListener("mousedown", closeContextMenu, {once:true}), 0);
+}
+function closeContextMenu(){ document.querySelectorAll(".context-menu").forEach(m=>m.remove()); }
+function openNodeContextMenu(ev, id){
+  const f = focusById(id);
+  showContextMenu(ev.clientX, ev.clientY, [
+    { label:"プロパティを表示", action:()=>{ state.activeFocusId=id; renderAll(); } },
+    { label:"複製 (Ctrl+D)", action: duplicateSelection },
+    { sep:true },
+    { label:"相互排他に設定…", action:()=> openMutexPicker(id) },
+    { sep:true },
+    { label:"削除", danger:true, action: deleteSelection },
+  ]);
+}
+function openCanvasContextMenu(ev){
+  const rect = document.getElementById("canvaswrap").getBoundingClientRect();
+  const world = screenToWorld(ev.clientX-rect.left, ev.clientY-rect.top);
+  showContextMenu(ev.clientX, ev.clientY, [
+    { label:"ここにNFを追加", action:()=>{
+      const gx=state.project.settings.gridX, gy=state.project.settings.gridY;
+      commit("add focus", ()=>{
+        const branchId = state.ui.activeBranchFilter || ensureDefaultBranch();
+        const f = makeFocus({ id: uniqueFocusId("NEW_FOCUS"), x:Math.round(world.x/gx), y:Math.round(world.y/gy), branchId });
+        ft().focuses.push(f); state.selection=new Set([f.id]); state.activeFocusId=f.id;
+      });
+    }},
+    { label:"貼り付け", action: pasteClipboard },
+    { sep:true },
+    { label:"全体表示に合わせる", action: fitToScreen },
+    { label:"自動整列", action:()=>{ if(confirm("現在の配置を自動整列で上書きします。よろしいですか？")) commit("auto layout", autoLayout); } },
+  ]);
+}
+function openMutexPicker(id){
+  openModal("相互排他グループに設定", (body, close)=>{
+    const tree = ft();
+    const others = tree.focuses.filter(f=>f.id!==id);
+    const sel = el("select", {multiple:true, size:Math.min(10, Math.max(4,others.length)), style:"width:100%;"});
+    for(const o of others) sel.appendChild(el("option",{value:o.id, selected: mutexPartnersOf(id).includes(o.id)}, o.id));
+    body.appendChild(el("p",{style:"color:var(--ink-faint);font-size:11.5px;margin:0 0 10px;"}, "Ctrl/Cmdクリックで複数選択できます。選択したNFすべてと相互排他になります。"));
+    body.appendChild(sel);
+    return { onSave: ()=>{
+      const chosen = [...sel.selectedOptions].map(o=>o.value);
+      commit("set mutex", ()=>{
+        const tree = ft();
+        tree.mutexGroups = tree.mutexGroups.map(g=>({...g, focuses: g.focuses.filter(x=>x!==id)})).filter(g=>g.focuses.length>1);
+        if(chosen.length) tree.mutexGroups.push({ id: uid("mutex"), focuses:[id, ...chosen] });
+      });
+      close();
+    }};
+  });
+}
+
+/* =========================================================================
+   12. Properties panel
+   ========================================================================= */
+function renderProperties(){
+  const root = document.getElementById("propspanel");
+  clear(root);
+  root.appendChild(el("div", {class:"tabs"}, [ el("div",{class:"tab active"}, state.selection.size>1 ? `${state.selection.size} 件選択中` : "プロパティ") ]));
+  if(!state.activeFocusId || !focusById(state.activeFocusId)){
+    root.appendChild(el("div", {class:"prop-empty"}, "NFを選択すると、\nここに詳細プロパティが表示されます。\n\nキャンバス上でダブルクリックすると\n新規NFを作成できます。"));
+    return;
+  }
+  const f = focusById(state.activeFocusId);
+  const scroll = el("div", {class:"prop-scroll"});
+  scroll.appendChild(renderPreviewGroup(f));
+  scroll.appendChild(renderBasicGroup(f));
+  scroll.appendChild(renderPositionGroup(f));
+  scroll.appendChild(renderPrereqGroup(f));
+  scroll.appendChild(renderMutexGroup(f));
+  scroll.appendChild(renderLocalisationGroup(f));
+  scroll.appendChild(renderCodeFieldsGroup(f));
+  scroll.appendChild(renderStatusGroup(f));
+  root.appendChild(scroll);
+}
+function renderPreviewGroup(f){
+  const g = el("div", {class:"prop-group", style:"background:var(--bg-alt);"});
+  const lang = state.project.localisation.languages.find(l=>l.code===state.ui.codeLang) || state.project.localisation.languages[0];
+  const entry = (state.project.localisation.entries[f.id]||{})[lang && lang.code] || {};
+  const usedFallback = !entry.name || !entry.name.trim();
+  g.appendChild(el("h4",null, `ゲーム内プレビュー（${lang ? lang.label : ""}）`));
+  g.appendChild(el("div",{style:"font-family:var(--font-head);font-size:15px;color:var(--brass-bright);margin-bottom:4px;"}, entry.name && entry.name.trim() ? entry.name : f.id));
+  g.appendChild(el("div",{style:"font-size:11.5px;color:var(--ink-dim);line-height:1.6;"}, entry.desc && entry.desc.trim() ? entry.desc : "（説明文の登録なし）"));
+  if(usedFallback) g.appendChild(el("div",{style:"font-size:10px;color:var(--ink-faint);margin-top:6px;"}, "※ この言語のLocalisationが未設定のため、NF IDをフォールバック表示しています。"));
+  return g;
+}
+function fieldWrap(label, inputEl){
+  return el("div", {class:"field"}, [ el("label",null,label), inputEl ]);
+}
+function propInput(f, key, type, opts){
+  opts = opts || {};
+  const attrs = { type: type||"text", value: f[key] };
+  if(opts.integer) attrs.step = "1";
+  const input = el("input", attrs);
+  input.addEventListener("change", ()=>{
+    let v = input.value;
+    if(type==="number") v = opts.integer ? Math.round(parseFloat(v)||0) : (parseFloat(v)||0);
+    if(key==="id"){
+      const newId = renameFocusId(f.id, v);
+      if(newId===null){ alert("そのIDは既に使用されています。"); input.value = f.id; return; }
+      pushHistory(); onProjectChanged("rename id", true);
+      return;
+    }
+    commit("edit "+key, ()=>{ f[key] = v; input.value = f[key]; });
+  });
+  return input;
+}
+function renderBasicGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,"基本情報"));
+  g.appendChild(fieldWrap("NF ID", propInput(f,"id","text")));
+  const iconBtn = el("div", {class:"icon-picker-btn", onclick:()=>openIconPickerModal(f)});
+  const asset = state.project.assets.icons.find(a=>a.gfxName===f.icon);
+  const prev = el("div",{class:"ip-prev"});
+  if(asset) prev.appendChild(el("img",{src:asset.dataUrl})); else prev.appendChild(el("span",{style:"font-size:9px;color:var(--ink-faint)"},"GFX"));
+  iconBtn.appendChild(prev);
+  iconBtn.appendChild(el("span",{class:"ip-name"}, f.icon || "(アイコン未選択)"));
+  g.appendChild(fieldWrap("アイコン", iconBtn));
+  const row = el("div",{class:"field-row"});
+  const costInput = propInput(f,"cost","number");
+  const daysNote = el("div",{style:"font-size:10px;color:var(--ink-faint);margin-top:3px;"}, `≈ ${costToDays(f.cost)} 日（cost × 7）`);
+  costInput.addEventListener("input", ()=>{ daysNote.textContent = `≈ ${costToDays(parseFloat(costInput.value)||0)} 日（cost × 7）`; });
+  const costField = el("div",{class:"field"},[ el("label",null,"Cost（コスト値）"), costInput, daysNote ]);
+  row.appendChild(costField);
+  const branchSel = el("select");
+  branchSel.appendChild(el("option",{value:""}, "(未分類)"));
+  for(const b of ft().branches) branchSel.appendChild(el("option",{value:b.id, selected:f.branchId===b.id}, b.name));
+  branchSel.addEventListener("change", ()=> commit("set branch", ()=>{ f.branchId = branchSel.value; }));
+  row.appendChild(fieldWrap("ブランチ", branchSel));
+  g.appendChild(row);
+  return g;
+}
+function renderPositionGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,"座標（整数のみ）"));
+  const row = el("div",{class:"field-row"});
+  row.appendChild(fieldWrap("X", propInput(f,"x","number",{integer:true})));
+  row.appendChild(fieldWrap("Y", propInput(f,"y","number",{integer:true})));
+  g.appendChild(row);
+  g.appendChild(el("div",{style:"font-size:10px;color:var(--ink-faint);margin:-4px 0 8px;"}, "X・Yは常に整数に丸められます（HOI4のグリッド仕様）。"));
+  const relSel = el("select");
+  relSel.appendChild(el("option",{value:""}, "(なし — 絶対座標)"));
+  for(const o of ft().focuses) if(o.id!==f.id) relSel.appendChild(el("option",{value:o.id, selected:f.relativePositionId===o.id}, o.id));
+  relSel.addEventListener("change", ()=> commit("set relative position", ()=>{ f.relativePositionId = relSel.value; }));
+  g.appendChild(fieldWrap("relative_position_id（基準NF）", relSel));
+  return g;
+}
+function renderPrereqGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null, "前提条件 (prerequisite)"));
+  g.appendChild(el("div",{style:"font-size:10.5px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6;"}, "各グループはOR条件、グループ内は同時に必要なAND条件として出力されます。"));
+  f.prerequisites.forEach((group, gi)=>{
+    const gd = el("div", {class:"prereq-group"});
+    gd.appendChild(el("div",{class:"pg-head"},[ el("span",null,`グループ ${gi+1}${f.prerequisites.length>1?" (OR)":""}`),
+      el("span",{class:"mini-btn", onclick:()=>commit("remove prereq group",()=>{ f.prerequisites.splice(gi,1); })}, "グループ削除") ]));
+    const chips = el("div",{class:"chip-list"});
+    group.forEach((pid,pi)=> chips.appendChild(el("span",{class:"chip", onclick:()=>focusOnNode(pid)},[ pid,
+      el("span",{class:"x", onclick:(ev)=>{ ev.stopPropagation(); commit("remove prereq", ()=>{ group.splice(pi,1); if(!group.length) f.prerequisites.splice(gi,1); }); }},"×") ])));
+    gd.appendChild(chips);
+    const addRow = el("div",{class:"add-row"});
+    const sel = el("select");
+    sel.appendChild(el("option",{value:""}, "+ NFを追加…"));
+    for(const o of ft().focuses) if(o.id!==f.id && !group.includes(o.id)) sel.appendChild(el("option",{value:o.id}, o.id));
+    sel.addEventListener("change", ()=>{ if(sel.value) commit("add prereq", ()=>{ group.push(sel.value); }); });
+    addRow.appendChild(sel);
+    gd.appendChild(addRow);
+    g.appendChild(gd);
+  });
+  g.appendChild(el("button", {class:"mini-btn full-btn", onclick:()=>commit("new prereq group", ()=>{ f.prerequisites.push([]); })}, "＋ ORグループを追加"));
+  return g;
+}
+function renderMutexGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,[ "相互排他 (mutually_exclusive)", el("span",{class:"mini-btn", onclick:()=>openMutexPicker(f.id)}, "編集") ]));
+  const partners = mutexPartnersOf(f.id);
+  if(!partners.length) g.appendChild(el("div",{style:"font-size:11px;color:var(--ink-faint);"}, "未設定"));
+  else{
+    const chips = el("div",{class:"chip-list"});
+    partners.forEach(pid => chips.appendChild(el("span",{class:"chip mx", onclick:()=>focusOnNode(pid)}, pid)));
+    g.appendChild(chips);
+  }
+  return g;
+}
+function renderLocalisationGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,[ "Localisation", el("span",{class:"mini-btn", onclick:()=>openLanguageManagerModal()}, "言語管理") ]));
+  const entries = state.project.localisation.entries[f.id] || (state.project.localisation.entries[f.id] = {});
+  for(const lang of state.project.localisation.languages){
+    const e = entries[lang.code] || (entries[lang.code] = {name:"", desc:""});
+    const block = el("div", {class:"lang-block"});
+    block.appendChild(el("div",{class:"lb-head"}, el("b",null,lang.label)));
+    const nameInput = el("input",{type:"text", value:e.name, placeholder:"表示名"});
+    nameInput.addEventListener("change", ()=> commit("edit loc name", ()=>{ e.name = nameInput.value; }));
+    const descInput = el("textarea",{placeholder:"説明文", rows:2}, e.desc);
+    descInput.addEventListener("change", ()=> commit("edit loc desc", ()=>{ e.desc = descInput.value; }));
+    block.appendChild(fieldWrap("表示名 ("+f.id+")", nameInput));
+    block.appendChild(fieldWrap("説明 ("+f.id+"_desc)", descInput));
+    g.appendChild(block);
+  }
+  return g;
+}
+function codeTextarea(f, key, placeholder){
+  const t = el("textarea", {placeholder: placeholder, rows:3}, f[key]);
+  t.addEventListener("change", ()=> commit("edit "+key, ()=>{ f[key] = t.value; }));
+  return t;
+}
+function renderCodeFieldsGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,"Effect / Trigger（自由記述）"));
+  g.appendChild(el("div",{style:"font-size:10.5px;color:var(--ink-faint);margin-bottom:8px;line-height:1.6;"},
+    "ここに書いたHOI4コードはそのままエクスポートされます。ツールが内容を解釈することはありません。"));
+  g.appendChild(fieldWrap("completion_reward", codeTextarea(f,"completionRewardCode","add_political_power = 100")));
+  g.appendChild(fieldWrap("available", codeTextarea(f,"availableCode","has_government = fascism")));
+  g.appendChild(fieldWrap("bypass", codeTextarea(f,"bypassCode","")));
+  g.appendChild(fieldWrap("cancel", codeTextarea(f,"cancelCode","")));
+  g.appendChild(fieldWrap("ai_will_do", codeTextarea(f,"aiWillDoCode","factor = 1")));
+  g.appendChild(fieldWrap("will_lead_to_war_with（タグを空白区切り）", codeTextarea(f,"willLeadToWarWithCode","FRA ENG")));
+  g.appendChild(fieldWrap("search_filters（内容のみ）", codeTextarea(f,"searchFiltersCode","FOCUS_FILTER_POLITICAL")));
+  if(f.extraFields && f.extraFields.length){
+    g.appendChild(el("div",{style:"font-size:10.5px;color:var(--ink-faint);margin:8px 0 4px;"}, "インポート時に保持された未対応フィールド:"));
+    for(const ex of f.extraFields){
+      g.appendChild(el("div",{style:"font-family:var(--font-mono);font-size:10.5px;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:5px;margin-bottom:4px;white-space:pre-wrap;"},
+        `${ex.key} = ${ex.isBlock? "{ "+ex.raw.trim()+" }": ex.raw}`));
+    }
+  }
+  return g;
+}
+function renderStatusGroup(f){
+  const g = el("div", {class:"prop-group"});
+  g.appendChild(el("h4",null,"ステータス"));
+  const issues = focusIssues(currentIssues, f.id);
+  const list = el("div", {class:"status-list"});
+  if(!issues.length) list.appendChild(el("div",{class:"status-item ok"}, "問題は検出されていません"));
+  for(const i of issues) list.appendChild(el("div", {class:"status-item "+i.severity}, i.message));
+  g.appendChild(list);
+  return g;
+}
+
+/* icon picker modal */
+function openIconPickerModal(f){
+  openModal("アイコンを選択", (body, close)=>{
+    const search = el("input", {id:"iconsearch", type:"text", placeholder:"GFX名で検索…"});
+    body.appendChild(search);
+    const grid = el("div", {class:"iconmodal-grid"});
+    body.appendChild(grid);
+    function draw(){
+      clear(grid);
+      const qv = search.value.trim().toLowerCase();
+      const all = [
+        ...BUILTIN_ICONS.map(gfx=>({gfx, dataUrl:null})),
+        ...state.project.assets.icons.map(a=>({gfx:a.gfxName, dataUrl:a.dataUrl})),
+      ].filter(x=>!qv || x.gfx.toLowerCase().includes(qv));
+      for(const item of all){
+        const tile = el("div",{class:"asset-tile"+(f.icon===item.gfx?" sel":"")});
+        if(item.dataUrl) tile.appendChild(el("img",{src:item.dataUrl}));
+        else tile.appendChild(el("div",{style:"height:32px;display:flex;align-items:center;justify-content:center;"}, el("span",{class:"ph"},"GFX")));
+        tile.appendChild(el("div",{class:"an"}, item.gfx.replace(/^GFX_/,"")));
+        tile.onclick = ()=>{ commit("set icon", ()=>{ f.icon = item.gfx; }); close(); };
+        grid.appendChild(tile);
+      }
+      if(!all.length) grid.appendChild(el("div",{style:"grid-column:1/-1;color:var(--ink-faint);font-size:12px;padding:10px;"}, "一致するアイコンがありません。"));
+    }
+    search.addEventListener("input", draw);
+    draw();
+    const manualRow = el("div", {style:"display:flex;gap:6px;margin-top:12px;"});
+    const manualInput = el("input",{type:"text", placeholder:"GFX_ を直接入力", style:"flex:1;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:6px;color:var(--ink);"});
+    manualRow.appendChild(manualInput);
+    manualRow.appendChild(el("button",{class:"btn",onclick:()=>{ if(manualInput.value.trim()){ commit("set icon",()=>{f.icon=manualInput.value.trim();}); close(); } }}, "設定"));
+    body.appendChild(manualRow);
+    return {};
+  });
+}
+function openLanguageManagerModal(){
+  openModal("Localisation 言語管理 ／ .yml 読み込み", (body, close)=>{
+    body.appendChild(el("h4",{style:"margin:0 0 8px;font-family:var(--font-head);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);"}, "登録済み言語"));
+    const list = el("div");
+    function draw(){
+      clear(list);
+      state.project.localisation.languages.forEach((lang,i)=>{
+        const row = el("div",{style:"display:flex;gap:6px;align-items:center;margin-bottom:6px;"});
+        const codeInput = el("input",{type:"text", value:lang.code, style:"width:110px;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:5px;color:var(--ink);font-family:var(--font-mono);font-size:11px;"});
+        const labelInput = el("input",{type:"text", value:lang.label, style:"flex:1;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:5px;color:var(--ink);"});
+        codeInput.onchange = ()=> commit("edit lang code", ()=>{ lang.code = codeInput.value.trim()||lang.code; });
+        labelInput.onchange = ()=> commit("edit lang label", ()=>{ lang.label = labelInput.value.trim()||lang.label; });
+        const del = el("span",{class:"mini-btn", style: state.project.localisation.languages.length<=1?"opacity:.3;pointer-events:none;":"", onclick:()=>{
+          commit("remove lang", ()=>{ state.project.localisation.languages.splice(i,1); }); draw();
+        }}, "削除");
+        row.appendChild(codeInput); row.appendChild(labelInput); row.appendChild(del);
+        list.appendChild(row);
+      });
+    }
+    draw();
+    body.appendChild(list);
+    body.appendChild(el("button", {class:"mini-btn full-btn", style:"margin-top:8px;", onclick:()=>{
+      commit("add lang", ()=>{ state.project.localisation.languages.push({code:"new_lang", label:"New Language"}); }); draw();
+    }}, "＋ 言語を追加"));
+    body.appendChild(el("p",{style:"font-size:10.5px;color:var(--ink-faint);margin-top:10px;line-height:1.6;"},
+      "言語コードはHOI4の l_<コード>: 形式に対応します（例: japanese, english, german, french, spanish, russian, polish）。"));
+
+    body.appendChild(el("h4",{style:"margin:18px 0 4px;font-family:var(--font-head);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);"}, "Localization対応状況"));
+    const covBox = el("div", {style:"margin-bottom:14px;"});
+    function drawCoverage(){
+      clear(covBox);
+      for(const lang of state.project.localisation.languages){
+        const c = locCoverage(lang.code);
+        covBox.appendChild(el("div",{style:"display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-dim);padding:3px 0;"},[
+          el("span",null, lang.label+"（"+lang.code+"）"),
+          el("span",{style:"font-family:var(--font-mono);color:"+(c.named===c.total && c.total>0 ? "var(--teal)":"var(--brass-bright)")+";"}, `表示名 ${c.named} / ${c.total} NF ・ 説明 ${c.desced} / ${c.total}`),
+        ]));
+      }
+      if(!ft().focuses.length) covBox.appendChild(el("div",{style:"font-size:11px;color:var(--ink-faint);"}, "NFがまだありません。"));
+    }
+    drawCoverage();
+    body.appendChild(covBox);
+
+    body.appendChild(el("h4",{style:"margin:18px 0 8px;font-family:var(--font-head);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);"}, ".ymlローカライズファイルを読み込む"));
+    body.appendChild(el("p",{style:"font-size:11px;color:var(--ink-dim);line-height:1.7;margin:0 0 8px;"},
+      "HOI4形式（l_japanese: / KEY:0 \"...\" / KEY_desc:0 \"...\"）の .yml を読み込みます。KEY が NF の内部IDと完全一致した場合のみ表示名に、KEY_desc が一致した場合のみ説明文に反映されます（部分一致・あいまい一致はしません）。複数ファイルを同時に選択できます。同じキーは後から読み込んだ内容で上書きされます。"));
+
+    body.appendChild(el("label",{style:"display:block;font-size:10.5px;color:var(--ink-faint);margin:10px 0 3px;"}, "このファイルを扱う言語"));
+    const YML_LANG_OPTIONS = [
+      ["", "自動認識（ファイル内の l_<言語>: を使用）"],
+      ["japanese","日本語"], ["english","英語"], ["german","ドイツ語"], ["french","フランス語"],
+      ["spanish","スペイン語"], ["italian","イタリア語"], ["polish","ポーランド語"], ["russian","ロシア語"],
+      ["simp_chinese","中国語（簡体字）"], ["korean","韓国語"], ["__custom__","その他（コードを直接入力）"],
+    ];
+    const langOverrideSel = el("select", {style:"width:100%;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:6px 7px;color:var(--ink);font-size:12px;"});
+    YML_LANG_OPTIONS.forEach(([v,l])=> langOverrideSel.appendChild(el("option",{value:v}, l)));
+    body.appendChild(langOverrideSel);
+    const customLangInput = el("input", {type:"text", placeholder:"言語コード（例: braz_por）", style:"width:100%;margin-top:6px;background:var(--bg-alt);border:1px solid var(--line);border-radius:3px;padding:6px 7px;color:var(--ink);font-family:var(--font-mono);font-size:11px;display:none;"});
+    langOverrideSel.addEventListener("change", ()=>{ customLangInput.style.display = langOverrideSel.value === "__custom__" ? "block" : "none"; });
+    body.appendChild(customLangInput);
+    body.appendChild(el("p",{style:"font-size:10px;color:var(--ink-faint);margin:6px 0 10px;line-height:1.6;"},
+      "「自動認識」以外を選んだ場合、ファイル内に l_<言語>: の記載があってもそれを無視し、指定した言語としてすべてのキーを読み込みます（手動指定を優先）。"));
+
+    const fileInput = el("input", {type:"file", accept:".yml,.yaml,text/plain", multiple:true});
+    body.appendChild(fileInput);
+    const reportBox = el("div", {style:"margin-top:10px;"});
+    body.appendChild(reportBox);
+    const importBtn = el("button", {class:"btn primary full-btn", style:"margin-top:10px;", onclick:()=>{
+      const files = [...fileInput.files];
+      if(!files.length){ alert(".ymlファイルを選択してください。"); return; }
+      let forceLangKey = langOverrideSel.value || null;
+      if(forceLangKey === "__custom__"){
+        forceLangKey = customLangInput.value.trim();
+        if(!forceLangKey){ alert("言語コードを入力してください。"); return; }
+      }
+      importYmlFiles(files, reportBox, forceLangKey, drawCoverage);
+    }}, "選択したファイルを読み込む");
+    body.appendChild(importBtn);
+    return { onSave: close };
+  });
+}
+function importYmlFiles(files, reportBox, forceLangKey, onDone){
+  let pending = files.length;
+  const allStats = [];
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      let stats = null, error = null;
+      try{
+        const parsedByLang = parseLocalisationText(String(reader.result), forceLangKey || null);
+        if(!Object.keys(parsedByLang).length){
+          error = forceLangKey
+            ? "有効な \"KEY:0 \\\"値\\\"\" 形式の行が見つかりませんでした。"
+            : "l_<言語>: ブロックが見つかりませんでした（自動認識できません）。「このファイルを扱う言語」で言語を指定してください。";
+        } else {
+          commit("import yml: "+file.name, ()=>{ stats = mergeLocalisationImport(parsedByLang); });
+        }
+      }catch(e){ error = e.message; }
+      allStats.push({ name:file.name, stats, error });
+      pending--;
+      if(pending===0){ renderYmlImportReport(reportBox, allStats); if(onDone) onDone(); }
+    };
+    reader.onerror = ()=>{ allStats.push({name:file.name, error:"ファイルの読み込みに失敗しました。"}); pending--; if(pending===0){ renderYmlImportReport(reportBox, allStats); if(onDone) onDone(); } };
+    reader.readAsText(file, "utf-8");
+  });
+}
+function renderYmlImportReport(box, allStats){
+  clear(box);
+  box.appendChild(el("h5",{style:"margin:0 0 6px;font-size:10px;color:var(--ink-faint);letter-spacing:.06em;font-family:var(--font-head);"}, "読み込み結果"));
+  for(const s of allStats){
+    const wrap = el("div",{style:"background:var(--bg-alt);border:1px solid var(--line);border-radius:4px;padding:8px 9px;margin-bottom:6px;font-size:11px;"});
+    wrap.appendChild(el("div",{style:"font-family:var(--font-mono);color:var(--brass-bright);margin-bottom:3px;"}, s.name));
+    if(s.error){ wrap.appendChild(el("div",{style:"color:var(--red-bright);"}, "✕ " + s.error)); box.appendChild(wrap); continue; }
+    for(const langKey in s.stats.languages){
+      const ls = s.stats.languages[langKey];
+      wrap.appendChild(el("div",{style:"color:var(--ink-dim);"}, `${labelForLangKey(langKey)}（${langKey}）: ${ls.keys} キー中 NF一致 ${ls.matched} 件／未対応 ${ls.unmatched} 件`));
+    }
+    box.appendChild(wrap);
+  }
+  const totalUnmatched = allStats.reduce((n,s)=> n + (s.stats ? s.stats.unmatchedKeys : 0), 0);
+  if(totalUnmatched>0){
+    box.appendChild(el("p",{style:"font-size:10.5px;color:var(--ink-faint);margin-top:4px;line-height:1.6;"},
+      `※ ${totalUnmatched} 件のキーは現在のNFツリーに存在するIDと一致しませんでした。破棄はされていません（ロケール内部データとして保持されます）が、プレビューには使用されません。`));
+  }
+  renderAll();
+}
+
+/* =========================================================================
+   13. Bottom panel — Code / Localisation / Errors
+   ========================================================================= */
+function renderBottom(){
+  const tabs = document.getElementById("bottomtabs");
+  clear(tabs);
+  const errCount = currentIssues.filter(i=>i.severity==="error").length;
+  const warnCount = currentIssues.filter(i=>i.severity==="warn").length;
+  const defs = [
+    { id:"code", label:"生成コード" },
+    { id:"loc", label:"Localisation" },
+    { id:"errors", label:"検証", count: errCount+warnCount, err: errCount>0 },
+  ];
+  for(const d of defs){
+    tabs.appendChild(el("div", {class:"btab"+(state.ui.bottomTab===d.id?" active":""), onclick:()=>{ state.ui.bottomTab=d.id; renderBottom(); }}, [
+      d.label, d.count!=null ? el("span",{class:"cnt"+(d.err?" err":"")}, String(d.count)) : null,
+    ]));
+  }
+  const tools = el("div", {id:"bottomtools"});
+  if(state.ui.bottomTab==="code"){
+    tools.appendChild(el("button",{class:"mini-btn", onclick:copyGeneratedCode}, "コピー"));
+    tools.appendChild(el("button",{class:"mini-btn", onclick:()=>selectAllIn("codeout")}, "全選択"));
+  }
+  if(state.ui.bottomTab==="loc"){
+    const sel = el("select", {style:"background:var(--bg-alt);border:1px solid var(--line);color:var(--ink);border-radius:3px;padding:3px 6px;font-size:11px;"});
+    state.project.localisation.languages.forEach(l=> sel.appendChild(el("option",{value:l.code, selected:l.code===state.ui.codeLang}, l.label)));
+    sel.addEventListener("change", ()=>{ state.ui.codeLang = sel.value; renderBottom(); });
+    tools.appendChild(sel);
+    tools.appendChild(el("button",{class:"mini-btn", onclick:copyLocCode}, "コピー"));
+  }
+  tabs.appendChild(tools);
+
+  const pages = document.getElementById("bottompages");
+  clear(pages);
+  if(state.ui.bottomTab === "code") pages.appendChild(renderCodePage());
+  if(state.ui.bottomTab === "loc") pages.appendChild(renderLocPage());
+  if(state.ui.bottomTab === "errors") pages.appendChild(renderErrorsPage());
+}
+function renderCodePage(){
+  const page = el("div", {class:"bpage active"});
+  const code = generateFocusTreeCode(state.project);
+  const textarea = el("textarea", {id:"codeout", spellcheck:"false"}, code);
+  textarea.addEventListener("focus", ()=>{ state.ui.codeDirty = false; });
+  textarea.addEventListener("input", ()=>{ state.ui.codeDirty = true; applyBtn.disabled = false; });
+  page.appendChild(textarea);
+  const side = el("div", {class:"code-side"});
+  side.appendChild(el("h5",null,"直接編集について"));
+  side.appendChild(el("div",{class:"desc"}, "このコードは内部データから自動生成されています。テキストを直接編集した場合、下の「適用してインポート」を押すまでは反映されません。適用すると、このコードが新しい内部データとして読み込まれます（構造項目は解析、Effect/Triggerはそのままコードとして保持）。"));
+  const applyBtn = el("button", {class:"btn primary full-btn", disabled:true, onclick:()=>{
+    const text = document.getElementById("codeout").value;
+    importCodeIntoProject(text, true);
+  }}, "適用してインポート");
+  side.appendChild(applyBtn);
+  side.appendChild(el("h5",{style:"margin-top:16px;"},"整合性"));
+  side.appendChild(el("div",{class:"desc"}, `NF数: ${ft().focuses.length} ／ ブランチ数: ${ft().branches.length} ／ 相互排他グループ: ${ft().mutexGroups.length}`));
+  page.appendChild(side);
+  return page;
+}
+function renderLocPage(){
+  const page = el("div", {class:"bpage active"});
+  const code = generateLocalisationCode(state.project, state.ui.codeLang);
+  page.appendChild(el("textarea",{id:"localeout", spellcheck:"false", readonly:true}, code));
+  const side = el("div", {class:"code-side"});
+  side.appendChild(el("h5",null,"多言語"));
+  side.appendChild(el("div",{class:"desc"}, `${state.project.localisation.languages.length} 言語を管理中。各NFの表示名・説明はプロパティパネルで編集できます。`));
+  side.appendChild(el("h5",{style:"margin-top:12px;"},"命名規則"));
+  side.appendChild(el("div",{class:"desc"}, "KEY:0 \"表示名\"\nKEY_desc:0 \"説明\"\n（KEY = NF ID）"));
+  page.appendChild(side);
+  return page;
+}
+function renderErrorsPage(){
+  const page = el("div", {class:"bpage active errpage"});
+  if(!currentIssues.length){ page.appendChild(el("div",{class:"err-empty"}, "✓ 検出された問題はありません")); return page; }
+  const sorted = [...currentIssues].sort((a,b)=> (a.severity==="error"?0:1) - (b.severity==="error"?0:1));
+  for(const i of sorted){
+    page.appendChild(el("div",{class:"err-row", onclick:()=>{ if(i.focusId) focusOnNode(i.focusId); }},[
+      el("span",{class:"sev "+i.severity}),
+      el("div",null,[ el("div",{class:"em"}, i.message), el("div",{class:"ef"}, i.focusId? "NF: "+i.focusId : "ツリー全体") ]),
+    ]));
+  }
+  return page;
+}
+function copyGeneratedCode(){ const t=document.getElementById("codeout"); t.select(); document.execCommand && document.execCommand("copy");
+  navigator.clipboard && navigator.clipboard.writeText(t.value).catch(()=>{}); setStatus("生成コードをコピーしました。"); }
+function copyLocCode(){ const t=document.getElementById("localeout"); t.select();
+  navigator.clipboard && navigator.clipboard.writeText(t.value).catch(()=>{}); setStatus("Localisationをコピーしました。"); }
+function selectAllIn(id){ document.getElementById(id).select(); }
+
+function importCodeIntoProject(text, keepLocAndAssets){
+  const res = parseFocusTreeText(text);
+  if(!res.ok){ alert("インポートに失敗しました: " + res.error); return; }
+  commit("import code", ()=>{
+    const oldLoc = keepLocAndAssets ? deepClone(state.project.localisation) : null;
+    state.project.focusTree = res.tree;
+    if(keepLocAndAssets && oldLoc){
+      // keep existing localisation entries for ids that still exist; new ids get blank entries
+      const kept = {};
+      for(const f of res.tree.focuses) if(oldLoc.entries[f.id]) kept[f.id] = oldLoc.entries[f.id];
+      state.project.localisation.entries = kept;
+    } else {
+      state.project.localisation.entries = {};
+    }
+    for(const f of res.tree.focuses) if(!state.project.localisation.entries[f.id]) state.project.localisation.entries[f.id] = {};
+    state.selection = new Set(); state.activeFocusId = null;
+  });
+  state.ui.codeDirty = false;
+  if(res.warnings.length){
+    showImportWarnings(res.warnings);
+  } else {
+    setStatus(`インポート完了：NF ${res.tree.focuses.length} 件を読み込みました。`);
+  }
+  fitToScreen();
+}
+function showImportWarnings(warnings){
+  openModal("インポート結果（警告あり）", (body, close)=>{
+    body.appendChild(el("p",{style:"color:var(--ink-dim);font-size:12px;"}, `${warnings.length} 件の警告があります。破棄されたデータはありません（可能な限りそのまま保持されています）。`));
+    const list = el("div", {style:"max-height:320px;overflow-y:auto;"});
+    for(const w of warnings){
+      list.appendChild(el("div", {style:"font-size:11.5px;padding:7px;border-bottom:1px solid var(--line-soft);"},
+        [ el("div",{style:"font-family:var(--font-mono);color:var(--brass-bright);"}, `対象: ${w.target}`), el("div",null, w.reason) ]));
+    }
+    body.appendChild(list);
+    return {};
+  }, true);
+}
+
+/* =========================================================================
+   14. Generic modal system
+   ========================================================================= */
+function openModal(title, builder, onlyClose){
+  const bg = document.getElementById("modalbg");
+  const root = document.getElementById("modalroot");
+  clear(root);
+  function close(){ bg.classList.remove("show"); }
+  const body = el("div", {class:"mb"});
+  const header = el("div", {class:"mh"}, [ el("h3",null,title), el("span",{class:"close", onclick:close},"✕") ]);
+  root.appendChild(header);
+  root.appendChild(body);
+  const result = builder(body, close) || {};
+  const footer = el("div", {class:"mf"});
+  if(result.onDelete) footer.appendChild(el("button",{class:"btn danger", onclick:result.onDelete}, "削除"));
+  footer.appendChild(el("button",{class:"btn", onclick:close}, onlyClose ? "閉じる" : "キャンセル"));
+  if(result.onSave) footer.appendChild(el("button",{class:"btn primary", onclick:result.onSave}, "保存"));
+  if(result.customFooter) result.customFooter.forEach(b=>footer.appendChild(b));
+  root.appendChild(footer);
+  bg.classList.add("show");
+  bg.onclick = (e)=>{ if(e.target===bg) close(); };
+}
+
+/* -------- import code modal -------- */
+function openImportModal(){
+  openModal("HOI4コードを読み込む", (body, close)=>{
+    body.appendChild(el("p",{style:"font-size:12px;color:var(--ink-dim);line-height:1.7;"},
+      "既存の focus_tree = { ... } コードを貼り付けるか、.txt ファイルをアップロードしてください。現在のツリーはこの内容で置き換えられます（現在のプロジェクトは自動保存されているので、必要ならUndoで戻せます）。"));
+    const ta = el("textarea", {style:"width:100%;height:220px;font-family:var(--font-mono);font-size:11px;background:var(--bg-alt);border:1px solid var(--line);border-radius:4px;padding:8px;color:var(--ink);", placeholder:"focus_tree = {\n    id = my_focus_tree\n    focus = { ... }\n}"});
+    body.appendChild(ta);
+    const fileRow = el("div", {style:"margin-top:10px;"});
+    const fileInput = el("input", {type:"file", accept:".txt,.yml,text/plain", onchange:(e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader(); reader.onload = ()=>{ ta.value = reader.result; }; reader.readAsText(file, "utf-8");
+    }});
+    fileRow.appendChild(el("label",{style:"font-size:11px;color:var(--ink-faint);"}, "またはファイルを選択: "));
+    fileRow.appendChild(fileInput);
+    body.appendChild(fileRow);
+    return { onSave: ()=>{
+      if(!ta.value.trim()){ alert("コードが入力されていません。"); return; }
+      close();
+      importCodeIntoProject(ta.value, false);
+    }};
+  });
+}
+
+/* -------- project open / save modal -------- */
+function saveProjectFile(){
+  const json = JSON.stringify(state.project, null, 2);
+  offerDownload((state.project.focusTree.id || "project") + ".json", json);
+}
+function openProjectFileModal(){
+  openModal("プロジェクトを開く", (body, close)=>{
+    body.appendChild(el("p",{style:"font-size:12px;color:var(--ink-dim);"}, "以前に保存した .json プロジェクトファイルを選択してください。現在の内容は置き換えられます。"));
+    const fileInput = el("input", {type:"file", accept:".json,application/json"});
+    body.appendChild(fileInput);
+    body.appendChild(el("div",{style:"margin-top:14px;border-top:1px solid var(--line);padding-top:14px;"},[
+      el("p",{style:"font-size:12px;color:var(--ink-dim);margin-bottom:8px;"}, "または、白紙の新規プロジェクトを開始します。"),
+      el("button",{class:"btn", onclick:()=>{
+        if(!confirm("現在のプロジェクトを破棄して新規作成します。よろしいですか？")) return;
+        pushHistory(); state.project = makeEmptyProject(); state.selection=new Set(); state.activeFocusId=null;
+        onProjectChanged("new project", true); close();
+      }}, "＋ 新規プロジェクト"),
+    ]));
+    return { onSave: ()=>{
+      const file = fileInput.files[0];
+      if(!file){ alert("ファイルを選択してください。"); return; }
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const parsed = JSON.parse(reader.result);
+          if(!parsed.focusTree){ throw new Error("focusTree が見つかりません"); }
+          pushHistory();
+          state.project = Object.assign(makeEmptyProject(), parsed);
+          sanitizeCoordinates(state.project.focusTree);
+          state.selection = new Set(); state.activeFocusId = null;
+          onProjectChanged("open project", true);
+          close();
+        }catch(err){ alert("読み込みに失敗しました: " + err.message); }
+      };
+      reader.readAsText(file, "utf-8");
+    }};
+  });
+}
+
+/* -------- export modal -------- */
+function openExportModal(){
+  openModal("HOI4用にエクスポート", (body, close)=>{
+    const issues = validateProject(state.project);
+    const errCount = issues.filter(i=>i.severity==="error").length;
+    if(errCount>0){
+      body.appendChild(el("div",{style:"background:rgba(193,84,63,.12);border:1px solid rgba(193,84,63,.4);border-radius:4px;padding:9px 11px;font-size:12px;margin-bottom:12px;color:var(--red-bright);"},
+        `⚠ ${errCount} 件のエラーが検出されています。エクスポートは可能ですが、事前に「検証」タブの確認をおすすめします。`));
+    }
+    body.appendChild(el("p",{style:"font-size:12px;color:var(--ink-dim);margin-bottom:12px;"}, "書き出す項目を選んでください。"));
+    const opt1 = el("input",{type:"checkbox", checked:true}); const opt2 = el("input",{type:"checkbox", checked:true}); const opt3 = el("input",{type:"checkbox", checked:true});
+    body.appendChild(el("label",{style:"display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12.5px;"},[opt1, `focus_tree コード（common/national_focus/${ft().id}.txt）`]));
+    body.appendChild(el("label",{style:"display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12.5px;"},[opt2, "Localisation（全言語、localisation/&lt;lang&gt;/*.yml）"]));
+    body.appendChild(el("label",{style:"display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12.5px;"},[opt3, "プロジェクトファイル（.json、再編集用）"]));
+    body.appendChild(el("p",{style:"font-size:11px;color:var(--ink-faint);margin-top:10px;line-height:1.6;"},
+      "複数ファイルは .zip にまとめてダウンロードされます（.yml はそのままではダウンロードを許可されない形式のため、zip内に格納します）。"));
+    return { onSave: async ()=>{
+      close();
+      await exportBundle({ code:opt1.checked, loc:opt2.checked, proj:opt3.checked });
+    }};
+  });
+}
+async function exportBundle(opts){
+  if(typeof JSZip === "undefined"){ alert("エクスポート機能の読み込みに失敗しました。ネットワーク設定をご確認ください。"); return; }
+  const zip = new JSZip();
+  const treeId = ft().id || "focus_tree";
+  if(opts.code){
+    zip.file(`common/national_focus/${treeId}.txt`, "\uFEFF" + generateFocusTreeCode(state.project));
+  }
+  if(opts.loc){
+    const all = generateLocalisationCodeAll(state.project);
+    for(const langCode in all){
+      zip.file(`localisation/${pdxLangKey(langCode)}/${treeId}_l_${pdxLangKey(langCode)}.yml`, "\uFEFF" + all[langCode]);
+    }
+  }
+  if(opts.proj){
+    zip.file(`${treeId}.project.json`, JSON.stringify(state.project, null, 2));
+  }
+  const blob = await zip.generateAsync({ type:"blob" });
+  offerDownload(treeId + "_export.zip", blob);
+  setStatus("エクスポートを開始しました。");
+}
+
+/* -------- downloads capability wrapper -------- */
+let downloadsNS = null;
+async function initDownloads(){
+  try{ downloadsNS = await claude.use("downloads"); }catch(e){ downloadsNS = null; }
+}
+async function offerDownload(filename, data){
+  if(downloadsNS){
+    try{
+      await downloadsNS.save({ filename, data: typeof data==="string" ? data : data });
+      setStatus(`${filename} を保存しました。`);
+      return;
+    }catch(err){
+      if(err && err.code === "declined") return;
+      // fall through to manual fallback
+    }
+  }
+  // fallback: in-browser blob download (used outside the claude.ai viewer)
+  try{
+    const blob = typeof data === "string" ? new Blob([data], {type:"text/plain;charset=utf-8"}) : data;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1000);
+    setStatus(`${filename} をダウンロードしました。`);
+  }catch(e){ alert("ダウンロードできませんでした: " + e.message); }
+}
+
+/* =========================================================================
+   15. Status bar
+   ========================================================================= */
+let statusTimer = null;
+function setStatus(msg){
+  const s = document.getElementById("statusmsg");
+  if(s) s.textContent = msg;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(()=>{ if(s) s.textContent = "準備完了"; }, 4000);
+}
+function renderStatusbar(){
+  const bar = document.getElementById("statusbar");
+  clear(bar);
+  const issues = currentIssues;
+  const errCount = issues.filter(i=>i.severity==="error").length;
+  const warnCount = issues.filter(i=>i.severity==="warn").length;
+  bar.appendChild(el("span",{id:"statusmsg"}, "準備完了"));
+  bar.appendChild(el("span",{class:"stat"},[ el("span",{class:"dot", style:"background:var(--teal)"}), `NF ${ft().focuses.length}` ]));
+  bar.appendChild(el("span",{class:"stat"},[ el("span",{class:"dot", style:"background:var(--brass)"}), `ブランチ ${ft().branches.length}` ]));
+  bar.appendChild(el("span",{class:"stat"},[ el("span",{class:"dot", style:`background:${errCount?"var(--red-bright)":"var(--line)"}`}), `エラー ${errCount}` ]));
+  bar.appendChild(el("span",{class:"stat"},[ el("span",{class:"dot", style:`background:${warnCount?"var(--brass)":"var(--line)"}`}), `警告 ${warnCount}` ]));
+  const cov = locCoverage(state.ui.codeLang);
+  bar.appendChild(el("span",{class:"stat"}, `Localization対応: ${cov.named} / ${cov.total} NF`));
+  bar.appendChild(el("span",{class:"stat"}, `選択中: ${state.selection.size}`));
+  bar.appendChild(el("span",{class:"stat", style:"margin-left:auto;"}, "自動保存: 有効"));
+}
+
+/* =========================================================================
+   16. Master render + autosave + init
+   ========================================================================= */
+function onProjectChanged(label, skipHistoryPush){
+  renderAll();
+  scheduleAutosave();
+}
+function renderAll(){
+  renderToolbar();
+  renderSidebar();
+  renderCanvas();
+  renderCanvasTransform();
+  renderModebar();
+  renderCanvasHud();
+  renderProperties();
+  renderBottom();
+  renderStatusbar();
+}
+function renderModebar(){
+  const bar = document.getElementById("modebar");
+  clear(bar);
+  const langSel = el("select", {class:"pill", style:"padding:5px 8px;border:1px solid var(--line);background:var(--panel);color:var(--ink-dim);"});
+  state.project.localisation.languages.forEach(l=> langSel.appendChild(el("option",{value:l.code, selected:l.code===state.ui.codeLang}, "プレビュー言語: "+l.label)));
+  langSel.addEventListener("change", ()=>{ state.ui.codeLang = langSel.value; renderCanvas(); renderProperties(); renderBottom(); });
+  bar.appendChild(langSel);
+  if(state.ui.activeBranchFilter){
+    const b = branchById(state.ui.activeBranchFilter);
+    if(b) bar.appendChild(el("span",{class:"pill on"}, [ "表示中: "+b.name, el("span",{style:"cursor:pointer;margin-left:4px;", onclick:()=>{ state.ui.activeBranchFilter=null; renderAll(); }},"✕") ]));
+  }
+  if(state.ui.previewMode) bar.appendChild(el("span",{class:"pill on"}, "▶ プレビューモード"));
+}
+function renderCanvasHud(){
+  const hud = document.getElementById("canvashud");
+  clear(hud);
+  hud.appendChild(el("div",{class:"hud-btn", title:"ズームイン", onclick:()=>{ zoomBy(1.2); }}, "＋"));
+  hud.appendChild(el("div",{class:"hud-btn", title:"ズームアウト", onclick:()=>{ zoomBy(1/1.2); }}, "－"));
+  hud.appendChild(el("div",{class:"hud-btn", title:"全体表示", onclick: fitToScreen}, "⤢"));
+}
+function zoomBy(factor){
+  const wrap = document.getElementById("canvaswrap");
+  const cx = wrap.clientWidth/2, cy = wrap.clientHeight/2;
+  const before = screenToWorld(cx,cy);
+  state.camera.zoom = clamp(state.camera.zoom*factor, 0.12, 2.5);
+  const after = screenToWorld(cx,cy);
+  state.camera.x += (after.x-before.x)*state.camera.zoom;
+  state.camera.y += (after.y-before.y)*state.camera.zoom;
+  renderCanvasTransform();
+}
+
+const AUTOSAVE_KEY = "focusforge_autosave_v1";
+const scheduleAutosave = debounce(()=>{
+  try{
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ project: state.project, savedAt: Date.now() }));
+    const s = document.getElementById("statusmsg");
+    if(s && s.textContent === "準備完了") { /* keep quiet on routine saves */ }
+  }catch(e){ /* storage unavailable — ignore silently, in-memory state still holds */ }
+}, 900);
+
+function tryLoadAutosave(){
+  try{
+    const raw = localStorage.getItem(AUTOSAVE_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(parsed && parsed.project && parsed.project.focusTree) return parsed;
+  }catch(e){}
+  return null;
+}
+
+function init(){
+  initDownloads();
+  const saved = tryLoadAutosave();
+  if(saved){
+    state.project = Object.assign(makeEmptyProject(), saved.project);
+  } else {
+    state.project = seedProject();
+  }
+  sanitizeCoordinates(state.project.focusTree);
+  if(!state.ui.codeLang || !state.project.localisation.languages.some(l=>l.code===state.ui.codeLang)){
+    state.ui.codeLang = (state.project.localisation.languages[0]||{}).code || "japanese";
+  }
+  setupCanvasPanZoom();
+  setupKeyboardShortcuts();
+  window.addEventListener("resize", ()=> renderCanvasTransform());
+  renderAll();
+  fitToScreen();
+  state.ready = true;
+}
+document.addEventListener("DOMContentLoaded", init);
+
+
+
+</script>
+</body>
+</html>
