@@ -1214,6 +1214,7 @@ function renderToolbar(){
   bar.appendChild(tbBtn("📂 プロジェクトを開く", ()=>openProjectFileModal()));
   bar.appendChild(tbBtn("💾 保存", ()=>saveProjectFile()));
   bar.appendChild(tbBtn("⇩ 書き出し", ()=>openExportModal(), true));
+  bar.appendChild(tbBtn("🖼 PNG保存", ()=>exportTreePng()));
   bar.appendChild(el("div",{class:"tb-sep"}));
   bar.appendChild(el("span",{id:"zoomreadout"}, Math.round(state.camera.zoom*100)+"%"));
 }
@@ -1735,6 +1736,30 @@ function removeGhostLine(){ const g = document.getElementById("ghostline"); if(g
 function onNodeMouseDown(ev, id){
   if(ev.button !== 0) return;
   ev.stopPropagation();
+  if(state.ui.previewMode){
+    // Preview mode: press-and-drag on a card pans the view (same as empty
+    // canvas) instead of moving the card; a plain click with no drag still
+    // selects it so its details remain inspectable.
+    const startMouse = { x: ev.clientX, y: ev.clientY };
+    const startCam = { x: state.camera.x, y: state.camera.y };
+    let moved = false;
+    function move(e){
+      const dx = e.clientX-startMouse.x, dy = e.clientY-startMouse.y;
+      if(!moved && (Math.abs(dx)>2 || Math.abs(dy)>2)) moved = true;
+      if(moved){ state.camera.x = startCam.x+dx; state.camera.y = startCam.y+dy; renderCanvasTransform(); }
+    }
+    function up(){
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      if(!moved){
+        state.selection = new Set([id]); state.activeFocusId = id;
+        renderNodesSelectionOnly(); renderProperties();
+      }
+    }
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return;
+  }
   const additive = ev.shiftKey || ev.ctrlKey || ev.metaKey;
   if(additive){
     if(state.selection.has(id)) state.selection.delete(id); else state.selection.add(id);
@@ -1803,6 +1828,10 @@ function setupCanvasPanZoom(){
       startPan(ev); return;
     }
     if(ev.button === 0){
+      // In preview mode there is nothing to marquee-select — a press-and-hold
+      // drag instead just repositions the view (pan), matching how the rest
+      // of the preview experience favours "look around" over "edit".
+      if(state.ui.previewMode){ startPan(ev); return; }
       const rect = wrap.getBoundingClientRect();
       startMarquee(ev.clientX-rect.left, ev.clientY-rect.top, !ev.shiftKey);
     } else if(ev.button===1){ startPan(ev); }
@@ -2585,6 +2614,146 @@ async function exportBundle(opts){
   const blob = await zip.generateAsync({ type:"blob" });
   offerDownload(treeId + "_export.zip", blob);
   setStatus("エクスポートを開始しました。");
+}
+
+/* =========================================================================
+   PNG export — rasterizes the currently visible tree (respecting the active
+   branch filter / hidden branches) with a dedicated Canvas 2D renderer, so
+   the exported image is independent of scroll position and always matches
+   the live data. Card size/anchor constants mirror the on-screen .fnode.
+   ========================================================================= */
+async function exportTreePng(){
+  const tree = ft();
+  const gx = state.project.settings.gridX, gy = state.project.settings.gridY;
+  const visible = tree.focuses.filter(f => (!state.ui.activeBranchFilter || f.branchId===state.ui.activeBranchFilter) && !state.ui.hiddenBranches.has(f.branchId));
+  if(!visible.length){ alert("書き出すNFがありません。"); return; }
+  try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){}
+  const pos = resolveAbsolutePositions(tree);
+  const NW = 128, NH = 79;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for(const f of visible){
+    const p = pos[f.id];
+    minX = Math.min(minX, p.x*gx); maxX = Math.max(maxX, p.x*gx+NW);
+    minY = Math.min(minY, p.y*gy); maxY = Math.max(maxY, p.y*gy+NH);
+  }
+  const margin = 60;
+  const w = Math.ceil(maxX-minX+margin*2), h = Math.ceil(maxY-minY+margin*2);
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = w*scale; canvas.height = h*scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  const ox = margin-minX, oy = margin-minY;
+
+  ctx.fillStyle = "#11151b";
+  ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  for(let x=0; x<w; x+=26){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for(let y=0; y<h; y+=26){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  const visibleIds = new Set(visible.map(f=>f.id));
+  function drawPngPath(d, color, dashed){
+    const cmds = d.match(/[ML]\s*[-\d.]+\s+[-\d.]+/g) || [];
+    ctx.save();
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6;
+    ctx.setLineDash(dashed ? [5,3] : []);
+    ctx.beginPath();
+    let first = true;
+    for(const c of cmds){
+      const m = c.match(/([ML])\s*([-\d.]+)\s+([-\d.]+)/); if(!m) continue;
+      const x = parseFloat(m[2])+ox, y = parseFloat(m[3])+oy;
+      if(first){ ctx.moveTo(x,y); first=false; } else ctx.lineTo(x,y);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+  for(const f of visible){
+    if(!f.prerequisites.length) continue;
+    f.prerequisites.forEach(group=>{
+      group.forEach(fromId=>{
+        if(!visibleIds.has(fromId)) return;
+        const fp = pos[fromId]; if(!fp) return;
+        const { ax, ay, bx, by } = orthogonalAnchors(fp, pos[f.id], gx, gy);
+        drawPngPath(orthogonalPath(ax,ay,bx,by), "#eef1f5", group.length>1);
+      });
+    });
+  }
+  const drawnPairs = new Set();
+  for(const g of tree.mutexGroups){
+    for(let i=0;i<g.focuses.length;i++) for(let j=i+1;j<g.focuses.length;j++){
+      const a=g.focuses[i], b=g.focuses[j];
+      if(!visibleIds.has(a)||!visibleIds.has(b)) continue;
+      const key=[a,b].sort().join("|"); if(drawnPairs.has(key)) continue; drawnPairs.add(key);
+      const { ax, ay, bx, by } = orthogonalAnchors(pos[a], pos[b], gx, gy);
+      drawPngPath(orthogonalPath(ax,ay,bx,by), "#e2694f", true);
+    }
+  }
+
+  const iconImgs = {};
+  await Promise.all(visible.map(f=>{
+    const asset = state.project.assets.icons.find(a=>a.gfxName===f.icon);
+    if(!asset || iconImgs[f.icon]) return null;
+    return new Promise(res=>{
+      const img = new Image();
+      img.onload = ()=>{ iconImgs[f.icon]=img; res(); };
+      img.onerror = ()=> res();
+      img.src = asset.dataUrl;
+    });
+  }));
+
+  for(const f of visible){
+    const p = pos[f.id];
+    const x = p.x*gx+ox, y = p.y*gy+oy;
+    const branch = branchById(f.branchId);
+    const locEntry = (state.project.localisation.entries[f.id]||{})[state.ui.codeLang] || (Object.values(state.project.localisation.entries[f.id]||{})[0]) || {};
+    pngRoundRect(ctx, x, y, NW, NH, 5);
+    const grad = ctx.createLinearGradient(x,y,x,y+NH);
+    grad.addColorStop(0, "#1f2733"); grad.addColorStop(1, "#1a212b");
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = "#2a3341"; ctx.stroke();
+    pngRoundRect(ctx, x+8, y+7, 26, 26, 3);
+    ctx.fillStyle = "#161b22"; ctx.fill(); ctx.strokeStyle="#2a3341"; ctx.stroke();
+    if(iconImgs[f.icon]) ctx.drawImage(iconImgs[f.icon], x+9.5, y+8.5, 23, 23);
+    if(branch){ ctx.fillStyle = branch.color; ctx.beginPath(); ctx.arc(x+NW-14, y+13, 3, 0, Math.PI*2); ctx.fill(); }
+    ctx.fillStyle = "#d9dee6"; ctx.font = "600 11.5px Inter, sans-serif"; ctx.textBaseline = "top";
+    pngWrapText(ctx, locEntry.name || f.id, x+8, y+38, NW-16, 13, 2);
+    ctx.fillStyle = "#5c6675"; ctx.font = "8.5px 'IBM Plex Mono', monospace";
+    ctx.fillText(pngTruncate(ctx, f.id, NW-16), x+8, y+63);
+    ctx.fillStyle = "#e6b95c"; ctx.font = "10px 'IBM Plex Mono', monospace";
+    ctx.fillText("⏱ "+costToDays(f.cost)+"日", x+8, y+NH-14);
+  }
+
+  canvas.toBlob(blob=>{
+    if(!blob){ alert("画像の生成に失敗しました。"); return; }
+    offerDownload((tree.id||"focus_tree")+"_preview.png", blob);
+    setStatus("PNG画像を書き出しました。");
+  }, "image/png");
+}
+function pngRoundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function pngTruncate(ctx, text, maxW){
+  if(ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while(t.length>1 && ctx.measureText(t+"…").width > maxW) t = t.slice(0,-1);
+  return t+"…";
+}
+function pngWrapText(ctx, text, x, y, maxW, lineH, maxLines){
+  let line = "", lines = [];
+  for(const ch of String(text)){
+    const test = line+ch;
+    if(ctx.measureText(test).width > maxW && line){ lines.push(line); line = ch; }
+    else line = test;
+    if(lines.length >= maxLines) break;
+  }
+  if(line && lines.length < maxLines) lines.push(line);
+  if(lines.length === maxLines){
+    let last = lines[maxLines-1];
+    while(last.length>1 && ctx.measureText(last+"…").width > maxW) last = last.slice(0,-1);
+    lines[maxLines-1] = last + (ctx.measureText(text).width>maxW?"…":"");
+  }
+  lines.forEach((l,i)=> ctx.fillText(l, x, y+i*lineH));
 }
 
 /* -------- downloads capability wrapper -------- */
